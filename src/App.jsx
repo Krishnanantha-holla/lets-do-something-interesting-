@@ -1,57 +1,91 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import Map, { Source, Layer, NavigationControl } from 'react-map-gl/maplibre';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import Map, { Source, Layer, NavigationControl, GeolocateControl, Marker } from 'react-map-gl/maplibre';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { fetchEvents, CATEGORY_COLORS, CATEGORY_LABELS } from './api';
-import { Play, Pause, X } from 'lucide-react';
+import { Search, Activity, Flame, CloudLightning, Layers, Moon, Sun, Cuboid, X, MapPin, CloudRain, Thermometer } from 'lucide-react';
 
-const SPEEDS = { slow: 900, normal: 450, fast: 180 };
+function getEarthDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Earth Radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return Math.round(R * c);
+}
 
-const mapStyle = {
-  version: 8,
-  sources: {
-    esriImagery: {
-      type: "raster",
-      tiles: ["https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
-      tileSize: 256,
-      attribution: "Esri, Maxar, Earthstar Geographics"
+const MAP_STYLES = {
+  light: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+  dark: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+  satellite: {
+    version: 8,
+    sources: {
+      esriImagery: {
+        type: "raster",
+        tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+        tileSize: 256,
+        attribution: "Esri, Maxar, Earthstar Geographics"
+      }
     },
-    topoContours: {
-      type: "raster",
-      tiles: ["https://tile.opentopomap.org/{z}/{x}/{y}.png"],
-      tileSize: 256,
-      attribution: "OpenTopoMap contributors"
-    }
-  },
-  layers: [
-    { id: "space-bg", type: "background", paint: { "background-color": "#05060d" } },
-    { id: "imagery", type: "raster", source: "esriImagery", paint: { "raster-brightness-max": 0.72, "raster-contrast": 0.24, "raster-saturation": -0.22 } },
-    { id: "contours", type: "raster", source: "topoContours", paint: { "raster-opacity": 0.16, "raster-contrast": 0.35, "raster-saturation": -0.6, "raster-brightness-max": 0.65 } },
-    { id: "night-filter", type: "background", paint: { "background-color": "#03040b", "background-opacity": 0.28 } }
-  ]
+    layers: [{ id: "imagery", type: "raster", source: "esriImagery" }]
+  }
 };
 
 export default function App() {
   const mapRef = useRef(null);
+  
+  // App States
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [legendOpen, setLegendOpen] = useState(true);
   const [selectedEventId, setSelectedEventId] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  
+  // Theme & Map States
+  const [theme, setTheme] = useState(() => localStorage.getItem('eonet_theme') || 'light');
+  const [mapStyleKey, setMapStyleKey] = useState(() => localStorage.getItem('eonet_map_style') || 'light');
+  const [styleMenuOpen, setStyleMenuOpen] = useState(false);
+  const [is3D, setIs3D] = useState(() => localStorage.getItem('eonet_is_3d') === 'true');
+  const settingsMenuRef = useRef(null);
 
-  // Timeline state
-  const [currentTime, setCurrentTime] = useState(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [speed, setSpeed] = useState('normal');
+  // Search Pin & Weather State
+  const [searchPin, setSearchPin] = useState(null);
+  const [weatherData, setWeatherData] = useState(null);
 
+  const [activeCategories, setActiveCategories] = useState([]);
+
+  // Sync Document Class for CSS Variables
+  useEffect(() => {
+    if (theme === 'dark') document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
+    
+    // Persist to local storage
+    localStorage.setItem('eonet_theme', theme);
+    localStorage.setItem('eonet_map_style', mapStyleKey);
+    localStorage.setItem('eonet_is_3d', String(is3D));
+  }, [theme, mapStyleKey, is3D]);
+
+  // Detect click outside to close the settings menu
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (settingsMenuRef.current && !settingsMenuRef.current.contains(event.target)) {
+        setStyleMenuOpen(false);
+      }
+    };
+    if (styleMenuOpen) {
+       document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [styleMenuOpen]);
+
+  // Load Data
   useEffect(() => {
     fetchEvents()
       .then(data => {
         const sorted = [...data].sort((a, b) => a.startTime - b.startTime);
         setEvents(sorted);
-        if (sorted.length > 0) {
-          setCurrentTime(sorted[sorted.length - 1].startTime);
-        }
         setLoading(false);
       })
       .catch(err => {
@@ -61,54 +95,101 @@ export default function App() {
       });
   }, []);
 
-  // Animation Loop
+  // Open-Meteo Integration
   useEffect(() => {
-    let intervalId;
-    if (isPlaying && events.length > 0) {
-      intervalId = setInterval(() => {
-        setCurrentTime(prevTime => {
-          // Find next event time
-          const nextEvent = events.find(e => e.startTime > prevTime + 1000);
-          if (!nextEvent) {
-             setIsPlaying(false);
-             return prevTime; // Reached the end
-          }
-          return nextEvent.startTime;
+    if (searchPin) {
+      fetch(`https://api.open-meteo.com/v1/forecast?latitude=${searchPin.latitude}&longitude=${searchPin.longitude}&current=temperature_2m,weather_code`)
+        .then(res => res.json())
+        .then(data => {
+            if (data && data.current) setWeatherData(data.current);
+        })
+        .catch(err => {
+            console.error("Weather fetch failed", err);
+            setWeatherData(null);
         });
-      }, SPEEDS[speed]);
+    } else {
+      setWeatherData(null);
     }
-    return () => clearInterval(intervalId);
-  }, [isPlaying, speed, events]);
+  }, [searchPin]);
 
-  const handlePlayPause = () => {
-    if (!isPlaying && events.length > 0) {
-      const isAtEnd = !events.find(e => e.startTime > currentTime + 1000);
-      if (isAtEnd) {
-        // restart from beginning
-        setCurrentTime(events[0].startTime);
-      }
-    }
-    setIsPlaying(!isPlaying);
+  const toggleCategory = (catId) => {
+    setActiveCategories(prev => prev.includes(catId) ? prev.filter(c => c !== catId) : [...prev, catId]);
   };
 
+  // Advanced Geocoder Search with Autocomplete
+  const [geocoderResults, setGeocoderResults] = useState([]);
+  
+  const handleSearchChange = async (e) => {
+    const val = e.target.value;
+    setSearchQuery(val);
+    if (val.length > 2) {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(val)}&limit=4`);
+        const data = await res.json();
+        setGeocoderResults(data || []);
+      } catch (err) {
+        setGeocoderResults([]);
+      }
+    } else {
+      setGeocoderResults([]);
+    }
+  };
+
+  const flyToLocation = (location) => {
+    const lon = parseFloat(location.lon);
+    const lat = parseFloat(location.lat);
+    mapRef.current?.flyTo({
+      center: [lon, lat],
+      zoom: 12, duration: 2500, essential: true
+    });
+    setSearchPin({ longitude: lon, latitude: lat, name: location.display_name });
+    setSearchQuery(location.display_name);
+    setGeocoderResults([]);
+  };
+
+  const handleSearchSubmit = (e) => {
+    if (e.key === 'Enter' && geocoderResults.length > 0) {
+      flyToLocation(geocoderResults[0]);
+    }
+  };
+
+  const clearSearch = () => {
+    setSearchQuery("");
+    setGeocoderResults([]);
+    setSearchPin(null);
+  };
+
+  // Distance based sorting and filtering
+  const filteredEvents = useMemo(() => {
+    let result = events;
+    if (activeCategories.length > 0) result = result.filter(e => activeCategories.includes(e.categoryId));
+    
+    if (searchPin) {
+      // Find NASA events within 1,500km Haversine distance
+      result = result.filter(e => getEarthDistance(searchPin.latitude, searchPin.longitude, e.lat, e.lng) <= 1500);
+    } else if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      const matchSearch = result.filter(e => e.title.toLowerCase().includes(query) || e.categoryTitle.toLowerCase().includes(query));
+      if (matchSearch.length > 0 || geocoderResults.length === 0) result = matchSearch; 
+    }
+    return result;
+  }, [events, searchQuery, searchPin, activeCategories, geocoderResults]);
+
   const geojsonData = useMemo(() => {
-    if (!events.length) return null;
+    if (!filteredEvents.length) return null;
     return {
       type: 'FeatureCollection',
-      features: events.map(e => ({
+      features: filteredEvents.map(e => ({
         type: 'Feature',
         geometry: { type: 'Point', coordinates: [e.lng, e.lat] },
-        properties: {
-          id: e.id,
-          color: e.color,
-          status: e.status,
-          startTime: e.startTime,
-        }
+        properties: { id: e.id, color: e.color, status: e.status, startTime: e.startTime }
       }))
     };
-  }, [events]);
+  }, [filteredEvents]);
 
-  const liveCount = events.filter(e => e.status === 'open').length;
+  const activeEvents = filteredEvents.filter(e => e.status === 'open');
+  const fireCount = activeEvents.filter(e => e.categoryId === 'wildfires').length;
+  const stormCount = activeEvents.filter(e => e.categoryId === 'severeStorms').length;
 
   const handleMapClick = (e) => {
     if (e.features && e.features.length > 0) {
@@ -116,51 +197,93 @@ export default function App() {
       const clickedEvent = events.find(ev => ev.id === feature.properties.id);
       if (clickedEvent) {
         setSelectedEventId(clickedEvent.id);
-        mapRef.current?.flyTo({ center: [clickedEvent.lng, clickedEvent.lat], zoom: Math.max(mapRef.current.getZoom(), 4), duration: 900 });
+        mapRef.current?.flyTo({ center: [clickedEvent.lng, clickedEvent.lat], zoom: Math.max(mapRef.current.getZoom(), 4), padding: { right: 400 }, duration: 1200 });
       }
+    } else {
+      setSelectedEventId(null);
     }
+  };
+
+  const toggle3D = () => {
+    const next3D = !is3D;
+    setIs3D(next3D);
+    if (next3D) mapRef.current?.easeTo({ pitch: 55, bearing: -15, duration: 1000 });
+    else mapRef.current?.easeTo({ pitch: 0, bearing: 0, duration: 1000 });
+  };
+
+  const toggleTheme = () => {
+    const nextTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(nextTheme);
   };
 
   const selectedEvent = useMemo(() => events.find(e => e.id === selectedEventId), [selectedEventId, events]);
 
-  const cursorStyle = (state) => state.isHovering ? 'pointer' : 'default';
+  // Robust projection interceptor
+  const onStyleData = useCallback((e) => {
+    const map = e.target;
+    try {
+      if (map.setProjection && map.getStyle()) {
+        map.setProjection({ type: 'globe' });
+      }
+    } catch(err) {}
+  }, []);
+
+  const currentMapStyle = mapStyleKey === 'satellite' ? MAP_STYLES.satellite : (theme === 'dark' ? MAP_STYLES.dark : MAP_STYLES.light);
 
   return (
-    <div className="map-container">
+    <div className={`map-container ${selectedEvent ? 'detail-open' : ''}`}>
       <Map
         ref={mapRef}
-        initialViewState={{ longitude: 0, latitude: 16, zoom: 1.7 }}
-        minZoom={1} maxZoom={8}
-        mapStyle={mapStyle}
+        initialViewState={{ 
+          longitude: 0, 
+          latitude: 20, 
+          zoom: 1.5, 
+          pitch: is3D ? 55 : 0, 
+          bearing: is3D ? -15 : 0 
+        }}
+        minZoom={1} maxZoom={14}
+        mapStyle={currentMapStyle}
         interactiveLayerIds={['events-layer']}
         onClick={handleMapClick}
-        getCursor={cursorStyle}
+        onStyleData={onStyleData}
+        getCursor={(s) => s.isHovering ? 'pointer' : 'default'}
       >
-        <NavigationControl position="bottom-right" />
+        <NavigationControl position="bottom-right" visualizePitch={true} />
+        <GeolocateControl 
+          position="bottom-right" 
+          trackUserLocation={true} 
+          showUserHeading={true} 
+          onError={(err) => {
+            console.error(err);
+            setError("Location access denied or unavailable by browser.");
+            setTimeout(() => setError(null), 5000);
+          }}
+        />
+
+        {searchPin && (
+          <Marker longitude={searchPin.longitude} latitude={searchPin.latitude} anchor="bottom">
+            <MapPin size={38} color="#FF3B30" fill="#FF3B30" stroke="#FFF" strokeWidth={1.5} style={{ filter: 'drop-shadow(0px 8px 16px rgba(0,0,0,0.4))', transform: 'translateY(-10px)' }} />
+          </Marker>
+        )}
 
         {geojsonData && (
           <Source id="events" type="geojson" data={geojsonData}>
-            {/* Base marker layer filtered by current animation time */}
             <Layer 
-              id="events-layer"
-              type="circle"
-              filter={['<=', ['get', 'startTime'], currentTime || Date.now()]}
+              id="events-layer" type="circle"
               paint={{
-                'circle-radius': 7,
+                'circle-radius': ['interpolate', ['linear'], ['zoom'], 2, 5, 8, 12],
                 'circle-color': ['get', 'color'],
-                'circle-stroke-width': 1,
-                'circle-stroke-color': 'rgba(255, 255, 255, 0.8)'
+                'circle-stroke-width': 1.5,
+                'circle-stroke-color': theme === 'dark' ? '#111' : '#FFF'
               }}
             />
-            {/* Pulse effect layer for Live (open) events only */}
-            <Layer
-              id="events-pulse"
-              type="circle"
-              filter={['all', ['<=', ['get', 'startTime'], currentTime || Date.now()], ['==', ['get', 'status'], 'open']]}
+              <Layer
+              id="events-pulse" type="circle"
+              filter={['==', ['get', 'status'], 'open']}
               paint={{
-                'circle-radius': 14,
+                'circle-radius': ['interpolate', ['linear'], ['zoom'], 2, 12, 8, 28],
                 'circle-color': ['get', 'color'],
-                'circle-opacity': 0.3,
+                'circle-opacity': 0.25,
                 'circle-stroke-width': 0
               }}
             />
@@ -168,91 +291,133 @@ export default function App() {
         )}
       </Map>
 
-      {/* HEADER */}
+      {/* HEADER DASHBOARD */}
       <header className="header glass">
-        <div className="title-wrap">
-          <h1 className="title">EONET // Earth Events</h1>
-          <span className="subtitle">NASA Near Real-Time Natural Hazard Tracker</span>
+        <div className="header-top">
+          <div className="title-wrap">
+            <h1 className="title">Earth Events</h1>
+            <span className="subtitle">NASA Global Hazards Tracker</span>
+          </div>
+          
+          {/* Settings / Layer Controls */}
+          <div style={{ position: 'relative' }} ref={settingsMenuRef}>
+            <button className={`settings-btn ${styleMenuOpen ? 'active' : ''}`} onClick={() => setStyleMenuOpen(!styleMenuOpen)}>
+              <Layers size={18} />
+            </button>
+            <div className={`style-controls ${styleMenuOpen ? 'open' : ''}`}>
+              <button className={`style-btn ${mapStyleKey !== 'satellite' ? 'active' : ''}`} onClick={() => { setMapStyleKey('light'); setStyleMenuOpen(false); }}>Standard Map</button>
+              <button className={`style-btn ${mapStyleKey === 'satellite' ? 'active' : ''}`} onClick={() => { setMapStyleKey('satellite'); setStyleMenuOpen(false); }}>Satellite</button>
+              <hr style={{ borderColor: 'var(--panel-border-inner)', margin: '4px 0' }} />
+              <button className={`style-btn ${is3D ? 'active' : ''}`} onClick={() => { toggle3D(); setStyleMenuOpen(false); }} style={{ display: 'flex', gap: 6, alignItems:'center' }}>
+                <Cuboid size={14}/> 3D Tilt
+              </button>
+              <button className="style-btn" onClick={() => { toggleTheme(); setStyleMenuOpen(false); }} style={{ display: 'flex', gap: 6, alignItems:'center' }}>
+                {theme === 'dark' ? <><Sun size={14}/> Light UI</> : <><Moon size={14}/> Dark UI</>}
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="live-badge">
-          <span className="live-dot"></span>
-          <span><strong>{liveCount}</strong> live events</span>
+        
+        {/* Search Bar - Autocomplete */}
+        <div style={{ position: 'relative' }}>
+          <div className="search-bar">
+            <Search size={18} color="var(--muted)" />
+            <input 
+              type="text" className="search-input" 
+              placeholder="Search global places or events..." 
+              value={searchQuery}
+              onChange={handleSearchChange}
+              onKeyDown={handleSearchSubmit}
+            />
+            {searchQuery && (
+              <button onClick={clearSearch} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
+                <X size={16} />
+              </button>
+            )}
+          </div>
+          
+          {/* Autocomplete Dropdown */}
+          {geocoderResults.length > 0 && searchQuery && (
+            <div className="autocomplete-dropdown glass">
+              <div className="auto-group-label">Global Places</div>
+              {geocoderResults.map((loc, i) => (
+                <button key={i} className="auto-item" onClick={() => flyToLocation(loc)}>
+                  {loc.display_name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Actionable Statistics & Weather Panel */}
+        <div className="stats-grid">
+          <div className="stat-item">
+            <Activity size={14} color="var(--accent)" />
+            <span>{searchPin ? `${activeEvents.length} Nearby` : `${activeEvents.length} Active`}</span>
+          </div>
+          {fireCount > 0 && <div className="stat-item"><Flame size={14} color="#ff3b30" /><span>{fireCount} Wildfires</span></div>}
+          {stormCount > 0 && <div className="stat-item"><CloudLightning size={14} color="#5856d6" /><span>{stormCount} Storms</span></div>}
+          
+          {/* Weather Widget */}
+          {weatherData && searchPin && (
+             <div className="stat-item" style={{ background: 'var(--accent-light)', borderColor: 'transparent' }}>
+                <Thermometer size={14} color="var(--accent)" />
+                <span style={{ color: 'var(--accent)' }}>{weatherData.temperature_2m}°C</span>
+             </div>
+          )}
+        </div>
+
+        {/* Filter Pills */}
+        <div className="filter-pills">
+          {Object.entries(CATEGORY_LABELS).map(([catId, label]) => (
+            <button key={catId} className={`filter-pill ${activeCategories.includes(catId) ? 'active' : ''}`} onClick={() => toggleCategory(catId)}>
+              <span className="pill-color" style={{ '--pill-color': CATEGORY_COLORS[catId] }}></span>
+              {label}
+            </button>
+          ))}
         </div>
       </header>
 
-      {/* LEGEND */}
-      <aside className={`legend glass ${legendOpen ? 'expanded' : ''}`}>
-        <div className="legend-head">
-          <h2 className="legend-title">Category Legend</h2>
-          <button className="legend-toggle" onClick={() => setLegendOpen(!legendOpen)}>
-            {legendOpen ? "Hide" : "Show"}
-          </button>
-        </div>
-        {legendOpen && (
-          <ul className="legend-items">
-            {Object.keys(CATEGORY_LABELS).map(key => (
-              <li key={key} className="legend-item">
-                <span className="legend-color" style={{ '--legend-color': CATEGORY_COLORS[key] }}></span>
-                <span>{CATEGORY_LABELS[key]}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </aside>
-
-      {/* TIMELINE */}
-      <section className="timeline-controls glass">
-        <button className="control-btn" onClick={handlePlayPause}>
-          {isPlaying ? "Pause" : "Play"}
-        </button>
-        <select className="control-select" value={speed} onChange={e => setSpeed(e.target.value)}>
-          <option value="slow">Slow</option>
-          <option value="normal">Normal</option>
-          <option value="fast">Fast</option>
-        </select>
-        <div className="date-counter">
-          {currentTime ? new Date(currentTime).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' }) : (loading ? "Loading..." : "No events")}
-        </div>
-      </section>
-
-      {/* ERROR TOAST */}
-      {error && <div className="toast show">{error}</div>}
-
-      {/* DETAIL PANEL */}
-      <aside className={`detail-panel glass ${selectedEvent ? 'open' : ''}`} aria-hidden={!selectedEvent}>
+      {/* EMPTY STATE TOAST */}
+      {searchQuery && filteredEvents.length === 0 && (
+        <div className="toast show" style={{ background: 'rgba(255,255,255,0.8)', color: '#000' }}>No local NASA events found for "{searchQuery}"</div>
+      )}
+      {error && <div className="toast show">{error}</div>}<aside className={`detail-panel glass ${selectedEvent ? 'open' : ''}`} aria-hidden={!selectedEvent}>
         <div className="panel-head">
-          <h2 className="panel-title">Event Details</h2>
-          <button className="close-panel" onClick={() => setSelectedEventId(null)}><X size={16} /></button>
+          <h2 className="panel-title">Overview</h2>
+          <button className="close-panel" onClick={() => setSelectedEventId(null)}><X size={18} /></button>
         </div>
         <div className="panel-content">
-          {selectedEvent ? (
+          {selectedEvent && (
             <>
-              <h3 className="event-name">{selectedEvent.title}</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {selectedEvent.status === "open" && (
+                   <div className="live-badge"><span className="live-dot"></span>Live Event</div>
+                )}
+                <h3 className="event-name">{selectedEvent.title}</h3>
+                <span className="subtitle" style={{ fontSize: '0.9rem' }}>{selectedEvent.categoryTitle}</span>
+              </div>
+
               <div className="meta-grid">
                 <div className="meta-card">
-                  <div className="meta-label">Category</div>
-                  <div className="meta-value">{selectedEvent.categoryTitle}</div>
+                  <div className="meta-label">Started</div>
+                  <div className="meta-value">{new Date(selectedEvent.startTime).toLocaleDateString()}</div>
                 </div>
                 <div className="meta-card">
                   <div className="meta-label">Status</div>
-                  <div className="meta-value">{selectedEvent.status === "open" ? "Open / Live" : "Closed"}</div>
-                </div>
-                <div className="meta-card">
-                  <div className="meta-label">Start</div>
-                  <div className="meta-value">{new Date(selectedEvent.startTime).toLocaleString(undefined, { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</div>
+                  <div className="meta-value">{selectedEvent.status === "open" ? "Active" : "Resolved"}</div>
                 </div>
               </div>
-              <section>
-                <div className="meta-label" style={{ marginBottom: 8 }}>Source Links</div>
+
+              <section style={{ marginTop: 10 }}>
+                <div className="meta-label">Sources & Intel</div>
                 <ul className="source-list">
                   {selectedEvent.sources.length ? selectedEvent.sources.map((s, i) => (
-                    <li key={i}><a className="source-link" href={s.url} target="_blank" rel="noopener noreferrer">{s.id || "Source"} ↗</a></li>
-                  )) : <li className="meta-value">No source links available.</li>}
+                    <li key={i}><a className="source-link" href={s.url} target="_blank" rel="noopener noreferrer">{s.id || "External Source"} ↗</a></li>
+                  )) : <li className="meta-value" style={{ color: 'var(--muted)' }}>No source links available.</li>}
                 </ul>
               </section>
             </>
-          ) : (
-            <p className="meta-value">Click any event marker to inspect details.</p>
           )}
         </div>
       </aside>
