@@ -3,7 +3,7 @@ import Map, { Source, Layer, NavigationControl, GeolocateControl, Marker, Fullsc
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { fetchEvents, CATEGORY_COLORS, CATEGORY_LABELS } from './api';
-import { Search, Activity, Layers, Moon, Sun, Cuboid, X, MapPin, Thermometer, Share2, Globe } from 'lucide-react';
+import { Search, Activity, Layers, Moon, Sun, Cuboid, X, MapPin, Thermometer, Share2, Globe, ExternalLink } from 'lucide-react';
 
 function getEarthDistance(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -152,6 +152,20 @@ export default function App() {
   const clearSearch = () => { setSearchQuery(""); setGeocoderResults([]); };
   const backToHome = () => { setSearchPin(null); setSelectedEventId(null); setWikiData(null); setWeatherData(null); };
 
+  const shareLocation = () => {
+    const text = searchPin
+      ? `${wikiData?.title || searchPin.name} — ${searchPin.latitude.toFixed(5)}, ${searchPin.longitude.toFixed(5)}`
+      : selectedEvent ? `${selectedEvent.title} — ${selectedEvent.lat.toFixed(5)}, ${selectedEvent.lng.toFixed(5)}` : '';
+    if (navigator.share) {
+      navigator.share({ title: 'Atlas Location', text }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(text).then(() => {
+        const el = document.getElementById('copy-toast');
+        if (el) { el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 2000); }
+      });
+    }
+  };
+
   const filteredEvents = useMemo(() => {
     let result = events;
     if (activeCategories.length > 0) result = result.filter(e => activeCategories.includes(e.categoryId));
@@ -197,34 +211,22 @@ export default function App() {
     try { if (map.setProjection && map.getStyle()) map.setProjection({ type: 'globe' }); } catch(err) {}
   }, []);
 
-  const handleShare = useCallback(() => {
-    const pin = searchPin;
-    if (!pin) return;
-    const text = `${pin.name} — ${pin.latitude.toFixed(5)}, ${pin.longitude.toFixed(5)}`;
-    navigator.clipboard.writeText(text).then(() => {
-      const el = document.getElementById('copy-toast');
-      if (el) { el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 2000); }
-    }).catch(() => {});
-  }, [searchPin]);
-
   // Custom Trackpad Intercept & High-Velocity Parallax Starfield
   const onMapLoad = useCallback((e) => {
     const map = e.target;
     const starfield = document.getElementById('starfield');
-    const canvas = map.getCanvasContainer();
 
-    // Disable default scroll zoom so we can intercept it
-    map.scrollZoom.disable();
-
-    // Custom Trackpad Two-Finger Panning + Pinch-to-Zoom
+    // --- Trackpad: Pinch-to-Zoom + Two-Finger-to-Pan ---
+    const canvas = map.getCanvas();
     canvas.addEventListener('wheel', (evt) => {
       evt.preventDefault();
+      evt.stopPropagation();
       if (evt.ctrlKey || evt.metaKey) {
-        // Pinch gesture (browser reports ctrlKey=true for trackpad pinch)
+        // Pinch gesture (trackpad reports ctrlKey=true for pinch)
         const zoomDelta = -evt.deltaY * 0.01;
         map.zoomTo(map.getZoom() + zoomDelta, { duration: 0 });
       } else {
-        // Normal two-finger scroll → pan the map
+        // Two-finger scroll → pan the map
         map.panBy([evt.deltaX, evt.deltaY], { duration: 0 });
       }
     }, { passive: false });
@@ -241,10 +243,8 @@ export default function App() {
       if (!starTicking) {
          requestAnimationFrame(() => {
            const center = map.getCenter();
-           const pitch = map.getPitch();
            const bearing = map.getBearing();
            
-           // Calculate infinite unwrapped longitude delta to prevent snapping at dateline
            let deltaLng = center.lng - prevLng;
            if (deltaLng > 180) deltaLng -= 360;
            else if (deltaLng < -180) deltaLng += 360;
@@ -252,7 +252,6 @@ export default function App() {
            accumulatedLng += deltaLng;
            prevLng = center.lng;
            
-           // Multiply accumulated continuous rotations
            const x = (accumulatedLng * 8.5);
            const y = (center.lat * -8.5);
            
@@ -280,6 +279,7 @@ export default function App() {
 
   return (
     <div className={`map-wrapper`}>
+      <div className="copy-toast" id="copy-toast">📋 Copied to clipboard</div>
       <div className="starfield" id="starfield"></div>
       <div className={`map-container`}>
         <Map
@@ -351,8 +351,9 @@ export default function App() {
                  <p className="detail-subtitle">{searchPin ? searchPin.full_name : selectedEvent.categoryTitle}</p>
 
                  <div className="action-row">
-                    <button className="action-btn primary" onClick={handleShare}><Share2 size={18}/> Share</button>
-                    {(wikiData || selectedEvent?.sources?.length) && <button className="action-btn" onClick={() => { const url = wikiData?.url || selectedEvent?.sources?.[0]?.url; if (url) window.open(url, '_blank'); }}><Globe size={18}/> {wikiData ? 'Website' : 'Intel'}</button>}
+                    <button className="action-btn primary" onClick={shareLocation}><Share2 size={16}/> Share</button>
+                    {wikiData?.url && <a href={wikiData.url} target="_blank" rel="noreferrer" className="action-btn" style={{textDecoration:'none'}}><ExternalLink size={16}/> Wikipedia</a>}
+                    {selectedEvent?.sources?.length > 0 && <a href={selectedEvent.sources[0].url} target="_blank" rel="noreferrer" className="action-btn" style={{textDecoration:'none'}}><Globe size={16}/> Intel</a>}
                  </div>
 
                  <div className="about-card">
@@ -432,7 +433,6 @@ export default function App() {
           </div>
        </div>
 
-      <div className="toast" id="copy-toast">📋 Coordinates copied!</div>
     </div>
   </div>
   );
