@@ -204,8 +204,8 @@ html, body {
 }
 .style-controls.open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
 
-.segmented-control { display: flex; background: var(--control-bg); border-radius: 10px; padding: 3px; }
-.segmented-control button { flex: 1; padding: 6px 12px; border-radius: 8px; border: none; background: transparent; color: var(--muted); font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+.segmented-control { display: flex; background: var(--control-bg); border-radius: 10px; padding: 3px; overflow: hidden; }
+.segmented-control button { flex: 1; padding: 6px 8px; border-radius: 8px; border: none; background: transparent; color: var(--muted); font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .segmented-control button.active { background: var(--panel-bg); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,0.15); }
 
 .toggle-list { display: flex; flex-direction: column; }

@@ -3,7 +3,7 @@ import Map, { Source, Layer, NavigationControl, GeolocateControl, Marker, Fullsc
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { fetchEvents, CATEGORY_COLORS, CATEGORY_LABELS } from './api';
-import { Search, Activity, Layers, Moon, Sun, Cuboid, X, MapPin, Thermometer, Navigation, Globe } from 'lucide-react';
+import { Search, Activity, Layers, Moon, Sun, Cuboid, X, MapPin, Thermometer, Share2, Globe } from 'lucide-react';
 
 function getEarthDistance(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -17,18 +17,30 @@ function getEarthDistance(lat1, lon1, lat2, lon2) {
 const MAP_STYLES = {
   light: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
   dark: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
-  satellite: {
+  hybrid: {
     version: 8,
     projection: { type: "globe" },
     sources: {
       esriImagery: { type: "raster", tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"], tileSize: 256, attribution: "Esri, Maxar", maxzoom: 19 },
-      esriLabels: { type: "raster", tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"], tileSize: 256, attribution: "Esri Labels", maxzoom: 19 },
+      esriLabels: { type: "raster", tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"], tileSize: 256, maxzoom: 19 },
       esriRoads: { type: "raster", tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}"], tileSize: 256, maxzoom: 19 }
     },
     layers: [
       { id: "imagery", type: "raster", source: "esriImagery" },
       { id: "roads", type: "raster", source: "esriRoads" },
       { id: "labels", type: "raster", source: "esriLabels" }
+    ]
+  },
+  satellite: {
+    version: 8,
+    projection: { type: "globe" },
+    sources: {
+      esriImagery: { type: "raster", tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"], tileSize: 256, attribution: "Esri, Maxar", maxzoom: 19 },
+      esriLabels: { type: "raster", tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"], tileSize: 256, maxzoom: 19 }
+    },
+    layers: [
+      { id: "imagery", type: "raster", source: "esriImagery" },
+      { id: "labels", type: "raster", source: "esriLabels", minzoom: 8 }
     ]
   }
 };
@@ -176,6 +188,8 @@ export default function App() {
     mapRef.current?.easeTo({ pitch: next3D ? 55 : 0, bearing: next3D ? -15 : 0, duration: 1000 });
   };
 
+  const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+
   const selectedEvent = useMemo(() => events.find(e => e.id === selectedEventId), [selectedEventId, events]);
 
   const onStyleData = useCallback((e) => {
@@ -183,11 +197,37 @@ export default function App() {
     try { if (map.setProjection && map.getStyle()) map.setProjection({ type: 'globe' }); } catch(err) {}
   }, []);
 
+  const handleShare = useCallback(() => {
+    const pin = searchPin;
+    if (!pin) return;
+    const text = `${pin.name} — ${pin.latitude.toFixed(5)}, ${pin.longitude.toFixed(5)}`;
+    navigator.clipboard.writeText(text).then(() => {
+      const el = document.getElementById('copy-toast');
+      if (el) { el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 2000); }
+    }).catch(() => {});
+  }, [searchPin]);
+
   // Custom Trackpad Intercept & High-Velocity Parallax Starfield
   const onMapLoad = useCallback((e) => {
     const map = e.target;
     const starfield = document.getElementById('starfield');
+    const canvas = map.getCanvasContainer();
 
+    // Disable default scroll zoom so we can intercept it
+    map.scrollZoom.disable();
+
+    // Custom Trackpad Two-Finger Panning + Pinch-to-Zoom
+    canvas.addEventListener('wheel', (evt) => {
+      evt.preventDefault();
+      if (evt.ctrlKey || evt.metaKey) {
+        // Pinch gesture (browser reports ctrlKey=true for trackpad pinch)
+        const zoomDelta = -evt.deltaY * 0.01;
+        map.zoomTo(map.getZoom() + zoomDelta, { duration: 0 });
+      } else {
+        // Normal two-finger scroll → pan the map
+        map.panBy([evt.deltaX, evt.deltaY], { duration: 0 });
+      }
+    }, { passive: false });
 
     // Infinite Unwrapped Longitude Tracker
     let prevLng = map.getCenter().lng;
@@ -236,7 +276,7 @@ export default function App() {
     });
   }, []);
 
-  const currentMapStyle = mapStyleKey === 'satellite' ? MAP_STYLES.satellite : (theme === 'dark' ? MAP_STYLES.dark : MAP_STYLES.light);
+  const currentMapStyle = mapStyleKey === 'satellite' ? MAP_STYLES.satellite : mapStyleKey === 'hybrid' ? MAP_STYLES.hybrid : (theme === 'dark' ? MAP_STYLES.dark : MAP_STYLES.light);
 
   return (
     <div className={`map-wrapper`}>
@@ -248,7 +288,7 @@ export default function App() {
           minZoom={1} maxZoom={22}
           mapStyle={currentMapStyle}
           interactiveLayerIds={['events-layer']}
-          dragPan={true} dragRotate={true} scrollZoom={true} keyboard={true} doubleClickZoom={true} touchZoomRotate={true} touchPitch={true} pitchWithRotate={false}
+          dragPan={true} dragRotate={true} scrollZoom={false} keyboard={true} doubleClickZoom={true} touchZoomRotate={true} touchPitch={true} pitchWithRotate={false}
         onClick={handleMapClick}
         onStyleData={onStyleData}
         onLoad={onMapLoad}
@@ -311,8 +351,8 @@ export default function App() {
                  <p className="detail-subtitle">{searchPin ? searchPin.full_name : selectedEvent.categoryTitle}</p>
 
                  <div className="action-row">
-                    <button className="action-btn primary"><Navigation size={18}/> Directions</button>
-                    {(wikiData || selectedEvent?.sources?.length) && <button className="action-btn"><Globe size={18}/> {wikiData ? 'Website' : 'Intel'}</button>}
+                    <button className="action-btn primary" onClick={handleShare}><Share2 size={18}/> Share</button>
+                    {(wikiData || selectedEvent?.sources?.length) && <button className="action-btn" onClick={() => { const url = wikiData?.url || selectedEvent?.sources?.[0]?.url; if (url) window.open(url, '_blank'); }}><Globe size={18}/> {wikiData ? 'Website' : 'Intel'}</button>}
                  </div>
 
                  <div className="about-card">
@@ -373,7 +413,8 @@ export default function App() {
          <div className={`style-controls ${styleMenuOpen ? 'open' : ''}`} style={{ top: 54, right: 0 }}>
            
            <div className="segmented-control">
-              <button className={mapStyleKey !== 'satellite' ? 'active' : ''} onClick={() => { setMapStyleKey('light'); setStyleMenuOpen(false); }}>Map</button>
+              <button className={mapStyleKey === 'light' ? 'active' : ''} onClick={() => { setMapStyleKey('light'); setStyleMenuOpen(false); }}>Standard</button>
+              <button className={mapStyleKey === 'hybrid' ? 'active' : ''} onClick={() => { setMapStyleKey('hybrid'); setStyleMenuOpen(false); }}>Hybrid</button>
               <button className={mapStyleKey === 'satellite' ? 'active' : ''} onClick={() => { setMapStyleKey('satellite'); setStyleMenuOpen(false); }}>Satellite</button>
            </div>
            
@@ -391,6 +432,7 @@ export default function App() {
           </div>
        </div>
 
+      <div className="toast" id="copy-toast">📋 Coordinates copied!</div>
     </div>
   </div>
   );
