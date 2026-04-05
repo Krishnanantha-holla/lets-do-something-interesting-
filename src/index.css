@@ -79,7 +79,7 @@ html, body {
 }
 
 .maplibregl-canvas {
-  touch-action: none !important; /* Fix 1: yield all touch to MapLibre */
+  /* touch-action managed by the map-container wrapper — do not override here */
   filter: var(--map-filter);
   transition: filter var(--ease);
 }
@@ -1084,16 +1084,20 @@ html, body {
 
 @media (max-width: 768px) {
 
-  /* Map fills full screen on mobile */
+  /* ── Map: full-screen on mobile, sidebar floats over it ── */
   .map-container {
     left: 0 !important;
     width: 100vw !important;
+    height: 100dvh !important;
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 0 !important;
   }
 
   /* Hamburger visible */
   .hamburger-btn { display: flex; }
 
-  /* Sidebar becomes a slide-in drawer from the left */
+  /* Sidebar: fixed overlay, slides in from left, floats above map */
   .sidebar {
     position: fixed;
     top: 0; left: 0; bottom: 0;
@@ -1110,7 +1114,7 @@ html, body {
   /* Backdrop visible when sidebar open */
   .sidebar-backdrop { display: block; }
 
-  /* Sidebar close button — shown inside sidebar on mobile */
+  /* Sidebar close button */
   .sidebar-mobile-close {
     display: flex;
     position: absolute; top: 16px; right: 16px;
@@ -1125,7 +1129,7 @@ html, body {
   }
   .sidebar-mobile-close:hover { background: var(--text); color: var(--bg); }
 
-  /* StyleMenu — move to bottom-right, smaller */
+  /* StyleMenu — bottom-right, dropdown opens upward */
   .style-menu-anchor {
     top: auto !important;
     bottom: 100px !important;
@@ -1138,7 +1142,7 @@ html, body {
     bottom: calc(100% + 8px) !important;
   }
 
-  /* MapClickPanel — full-width bottom sheet on mobile */
+  /* MapClickPanel — full-width bottom sheet */
   .map-click-panel {
     left: 0 !important;
     right: 0 !important;
@@ -1162,7 +1166,7 @@ html, body {
     z-index: 480;
   }
 
-  /* Stats grid — 2 cols still fine, just tighter */
+  /* Stats grid */
   .stats-2x2 { gap: 6px; }
   .stat-card { padding: 10px; }
   .stat-card-value { font-size: 0.95rem; }
@@ -1181,23 +1185,24 @@ html, body {
     max-height: 70vh;
   }
 
-  /* MapLibre controls — smaller on mobile */
+  /* MapLibre controls — smaller, don't overlap FABs */
   .maplibregl-ctrl-group { border-radius: 10px !important; }
   .maplibregl-ctrl button { width: 32px !important; height: 32px !important; }
+
+  /* MapLibre bottom-right controls: lift above bottom sheet */
+  .maplibregl-ctrl-bottom-right {
+    bottom: 16px !important;
+    right: 12px !important;
+  }
 }
 
 @media (max-width: 480px) {
   .sidebar { width: 92vw; }
-
-  /* Tighten sidebar header on very small screens */
   .sidebar-header { padding: 14px 14px 10px; gap: 10px; }
   .app-title { font-size: 1rem; }
   .sidebar-tabs .sidebar-tab { font-size: 0.75rem; padding: 6px 8px; }
-
-  /* Style menu even more compact */
   .style-controls { width: 190px !important; }
 }
-
 /* ══════════════════════════════════════════════════════════════
    PART 2 — DYNAMIC STARFIELD BACKGROUND
    ══════════════════════════════════════════════════════════════ */

@@ -83,6 +83,18 @@ export default function App() {
   const [markersVisible,   setMarkersVisible]    = useState(true);
   const [sidebarOpen,      setSidebarOpen]       = useState(false);
 
+  // Adjust map padding when mobile sidebar opens/closes
+  useEffect(() => {
+    const isMobile = window.innerWidth <= 768;
+    if (!isMobile) return;
+    mapRef.current?.easeTo({
+      padding: sidebarOpen
+        ? { left: Math.min(340, window.innerWidth * 0.88) }
+        : { left: 0 },
+      duration: 280,
+    });
+  }, [sidebarOpen]);
+
   const [theme,       setTheme]       = useState(() => localStorage.getItem('eonet_theme')     || 'light');
   const [mapStyleKey, setMapStyleKey] = useState(() => localStorage.getItem('eonet_map_style') || 'hybrid');
   const [is3D,        setIs3D]        = useState(() => localStorage.getItem('eonet_is_3d') === 'true');

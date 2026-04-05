@@ -57,12 +57,17 @@ const MapView = forwardRef(function MapView(
     const canvas = map.getCanvas();
 
     // ── 1. Disable MapLibre's built-in scroll/drag so we own all gestures ──
+    // Keep touchZoomRotate and touchPitch ENABLED — MapLibre handles pinch natively.
     map.scrollZoom.disable();
     map.dragPan.disable();
+    map.touchZoomRotate.enable();   // explicit: pinch-to-zoom must stay on
+    map.touchPitch.enable();        // explicit: two-finger tilt must stay on
 
     // ── 2. Momentum tracker for pan inertia ──────────────────────────────
     const momentum = new MomentumTracker();
     let glideRaf   = null;
+    // Track active pointer IDs so we know when multi-touch is happening
+    const activePointers = new Set();
 
     const stopGlide = () => {
       if (glideRaf) { cancelAnimationFrame(glideRaf); glideRaf = null; }
@@ -73,17 +78,15 @@ const MapView = forwardRef(function MapView(
       const { vx, vy } = momentum.velocity();
       if (Math.abs(vx) < 0.05 && Math.abs(vy) < 0.05) return;
 
-      // Scale velocity to pixel-per-frame (60 fps baseline)
       let rx = vx * 16;
       let ry = vy * 16;
-      const FRICTION = 0.88; // lower = stops faster, higher = longer glide
+      const FRICTION = 0.88;
 
       const step = () => {
         rx *= FRICTION;
         ry *= FRICTION;
         if (Math.abs(rx) < 0.3 && Math.abs(ry) < 0.3) return;
         const lat = map.getCenter().lat;
-        // Kill vertical glide if we're at the pole boundary
         if (Math.abs(lat) >= 78 && Math.sign(ry) === Math.sign(lat)) ry = 0;
         if (Math.abs(rx) < 0.3 && Math.abs(ry) < 0.3) return;
         map.panBy([rx, ry], { duration: 0, animate: false });
@@ -93,10 +96,25 @@ const MapView = forwardRef(function MapView(
     };
 
     // ── 3. Pointer-based drag (replaces dragPan) ──────────────────────────
-    let isDragging  = false;
+    // CRITICAL: skip custom handling entirely when multi-touch is active.
+    // This lets MapLibre's native touchZoomRotate handler own pinch gestures.
+    let isDragging = false;
     let lastX = 0, lastY = 0;
 
     const onPointerDown = (evt) => {
+      activePointers.add(evt.pointerId);
+
+      // Multi-touch: release any capture and hand off to MapLibre
+      if (activePointers.size > 1) {
+        if (isDragging) {
+          isDragging = false;
+          stopGlide();
+          momentum.clear();
+          try { canvas.releasePointerCapture(evt.pointerId); } catch (_) {}
+        }
+        return;
+      }
+
       if (evt.button !== 0 && evt.pointerType !== 'touch') return;
       stopGlide();
       momentum.clear();
@@ -107,6 +125,11 @@ const MapView = forwardRef(function MapView(
     };
 
     const onPointerMove = (evt) => {
+      // If more than one pointer is active, stop our pan and let MapLibre handle it
+      if (activePointers.size > 1) {
+        isDragging = false;
+        return;
+      }
       if (!isDragging) return;
       const dx = evt.clientX - lastX;
       const dy = evt.clientY - lastY;
@@ -116,15 +139,17 @@ const MapView = forwardRef(function MapView(
       map.panBy([-dx, -dy], { duration: 0, animate: false });
     };
 
-    const onPointerUp = () => {
+    const onPointerUp = (evt) => {
+      activePointers.delete(evt.pointerId);
       if (!isDragging) return;
       isDragging = false;
-      startGlide();
+      // Only start glide if no other fingers are still down
+      if (activePointers.size === 0) startGlide();
     };
 
-    canvas.addEventListener('pointerdown', onPointerDown);
-    canvas.addEventListener('pointermove', onPointerMove);
-    canvas.addEventListener('pointerup',   onPointerUp);
+    canvas.addEventListener('pointerdown',   onPointerDown);
+    canvas.addEventListener('pointermove',   onPointerMove);
+    canvas.addEventListener('pointerup',     onPointerUp);
     canvas.addEventListener('pointercancel', onPointerUp);
 
     // ── Double-tap / double-click → geo info panel ────────────────────────
