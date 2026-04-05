@@ -1,5 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Activity, X, Globe, Ruler, Zap } from 'lucide-react';
+import { Search, Activity, X, Globe, Ruler, Zap, Flame, Mountain, CloudLightning, Waves, Sun, Wind, ArrowDownCircle, Snowflake, Anchor, Thermometer } from 'lucide-react';
+
+const CATEGORY_ICONS = {
+  wildfires: Flame,
+  volcanoes: Mountain,
+  severeStorms: CloudLightning,
+  earthquakes: Activity,
+  floods: Waves,
+  drought: Sun,
+  dustHaze: Wind,
+  landslides: ArrowDownCircle,
+  snow: Snowflake,
+  seaLakeIce: Anchor,
+  tempExtremes: Thermometer,
+};
 import { CATEGORY_COLORS, CATEGORY_LABELS } from '../api';
 import { useDebounce } from '../hooks/useDebounce';
 import DetailView from './DetailView';
@@ -19,6 +33,7 @@ export default function Sidebar({
   wikiData, weatherData, loadingWiki, loadingWeather,
   activeCategories, onToggleCategory,
   activeEventCount,
+  events, onEventClick,
   onFlyTo, onBack, onShare,
   onMeasure, onMeasureClear,
 }) {
@@ -147,20 +162,46 @@ export default function Sidebar({
               <span>{activeEventCount} active events</span>
             </div>
 
-            {/* Category filters */}
-            <div className="section-label">Topologies</div>
-            <div className="category-grid">
+            {/* Horizontal Filter Chips */}
+            <div className="filter-scroll">
               {Object.entries(CATEGORY_LABELS).map(([catId, label]) => {
                 const active = activeCategories.includes(catId);
+                const Icon = CATEGORY_ICONS[catId] || Flame;
                 return (
                   <button
                     key={catId}
-                    className={`cat-pill ${active ? 'active' : ''}`}
+                    className={`filter-chip ${active ? 'active' : ''}`}
                     onClick={() => onToggleCategory(catId)}
+                    style={{ '--cat-color': CATEGORY_COLORS[catId] }}
                   >
-                    <span className="cat-dot" style={{ background: CATEGORY_COLORS[catId] }} />
-                    {label}
+                    <Icon size={13} /> {label}
                   </button>
+                );
+              })}
+            </div>
+
+            {/* Event Feed */}
+            <div className="section-label" style={{ marginTop: 12, marginBottom: 8 }}>Latest Activity Feed</div>
+            <div className="event-feed">
+              {events && events.slice(0, 100).map(ev => {
+                const Icon = CATEGORY_ICONS[ev.categoryId] || Flame;
+                const d = new Date(ev.startTime);
+                const dateStr = !isNaN(d) ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recent';
+                return (
+                  <div key={ev.id} className="event-feed-card" onClick={() => onEventClick(ev.id)} style={{ '--cat-color': ev.color }}>
+                    <div className="event-card-top">
+                      <div className="event-cat-badge" style={{ backgroundColor: `${ev.color}22`, color: ev.color }}>
+                        <Icon size={12} strokeWidth={2.5} /> <span>{ev.categoryTitle}</span>
+                      </div>
+                      <div className="event-date">{dateStr}</div>
+                    </div>
+                    <div className="event-card-title">{ev.title}</div>
+                    {ev.status === 'open' && (
+                      <div className="event-status-live">
+                        <span className="live-dot-small" /> Active Now
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>

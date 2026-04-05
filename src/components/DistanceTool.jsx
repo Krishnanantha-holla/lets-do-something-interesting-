@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, X, Ruler, ArrowRight, RotateCcw } from 'lucide-react';
+import { Search, X, Ruler, ArrowRight, RotateCcw, MapPin } from 'lucide-react';
 import { useDebounce } from '../hooks/useDebounce';
 
 function haversine(lat1, lon1, lat2, lon2) {
@@ -47,17 +47,9 @@ function PointInput({ label, color, value, onSelect, onClear }) {
     return () => { cancelled = true; };
   }, [debounced]);
 
-  // Auto-select top result once results arrive and user hasn't manually picked
-  useEffect(() => {
-    if (results.length > 0 && !value && !focused) {
-      onSelect(toPin(results[0]));
-      setQuery(results[0].display.split(',')[0]);
-      setResults([]);
-    }
-  }, [results]);
 
   const select = (item) => {
-    setQuery(item.display.split(',')[0]);
+    setQuery('');
     setResults([]);
     setFocused(false);
     onSelect(toPin(item));
@@ -80,6 +72,12 @@ function PointInput({ label, color, value, onSelect, onClear }) {
           onChange={e => { setQuery(e.target.value); if (value) onClear(); }}
           onFocus={() => setFocused(true)}
           onBlur={() => setTimeout(() => setFocused(false), 200)}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && results.length > 0) {
+              e.preventDefault();
+              select(results[0]);
+            }
+          }}
         />
         {value && <button className="search-clear" onClick={clear}><X size={13} /></button>}
       </div>
@@ -92,8 +90,11 @@ function PointInput({ label, color, value, onSelect, onClear }) {
       {results.length > 0 && focused && (
         <div className="autocomplete-dropdown glass" style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200, marginTop: 4 }}>
           {results.map((r, i) => (
-            <button key={i} className="auto-item" onMouseDown={() => select(r)}>
-              {r.type === 'coords' ? `📌 ${r.display}` : r.display}
+            <button key={i} className="auto-item" onMouseDown={() => select(r)} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+              <span style={{ marginTop: '1px', display: 'flex' }}>
+                {r.type === 'coords' ? '📌' : <MapPin size={14} color={color} />}
+              </span>
+              <span style={{ textAlign: 'left', lineHeight: '1.2' }}>{r.display}</span>
             </button>
           ))}
         </div>

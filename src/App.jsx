@@ -144,13 +144,10 @@ export default function App() {
       const maxLng = Math.max(a.longitude, b.longitude);
       const minLat = Math.min(a.latitude, b.latitude);
       const maxLat = Math.max(a.latitude, b.latitude);
-      mapRef.current.flyTo({
-        center: [(minLng + maxLng) / 2, (minLat + maxLat) / 2],
-        zoom: Math.max(1, Math.min(10, 4 - Math.log2(Math.max(maxLng - minLng, maxLat - minLat) + 0.01))),
-        padding: { left: 420, top: 60, right: 60, bottom: 60 },
-        duration: 1800,
-        easing: t => t * (2 - t),
-      });
+      mapRef.current.fitBounds(
+        [[minLng, minLat], [maxLng, maxLat]],
+        { padding: { left: 420, top: 80, right: 80, bottom: 80 }, duration: 1800 }
+      );
     }
   }, []);
 
@@ -210,6 +207,8 @@ export default function App() {
         activeCategories={activeCategories}
         onToggleCategory={catId => setActiveCategories(prev => prev.includes(catId) ? prev.filter(c => c !== catId) : [...prev, catId])}
         activeEventCount={activeEventCount}
+        events={filteredEvents}
+        onEventClick={handleEventClick}
         onFlyTo={handleFlyTo}
         onBack={handleBack}
         onShare={handleShare}

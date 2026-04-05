@@ -40,6 +40,7 @@ const MapView = forwardRef(function MapView(
     flyTo:   (opts) => mapRef.current?.flyTo(opts),
     easeTo:  (opts) => mapRef.current?.easeTo(opts),
     getZoom: ()     => mapRef.current?.getZoom(),
+    fitBounds: (bounds, opts) => mapRef.current?.fitBounds(bounds, opts),
   }));
 
   const onStyleData = useCallback((e) => {
@@ -142,7 +143,7 @@ const MapView = forwardRef(function MapView(
 
         // deltaY from pinch is typically -3..+3 per frame; scale it smoothly
         const delta     = -evt.deltaY;
-        const zoomDelta = delta * 0.008;          // sensitivity
+        const zoomDelta = delta * 0.025;          // sensitivity increased
         const current   = map.getZoom();
         const target    = Math.min(22, Math.max(1, current + zoomDelta));
 
