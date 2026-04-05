@@ -274,12 +274,10 @@ const MapView = forwardRef(function MapView(
 
   }, []);
 
+  // Left-click: only handles marker clicks and cluster zoom-in.
+  // Location Info panel is intentionally NOT triggered here.
   const handleClick = useCallback((e) => {
-    if (!e.features?.length) {
-      // Bare map click — no marker hit
-      onBareClick?.(e.lngLat.lat, e.lngLat.lng);
-      return;
-    }
+    if (!e.features?.length) return; // bare click — do nothing
     const f = e.features[0];
     if (f.properties?.cluster_id) {
       const map = mapRef.current;
@@ -296,7 +294,14 @@ const MapView = forwardRef(function MapView(
       return;
     }
     if (f.properties?.id) onEventClick(f.properties.id);
-  }, [onEventClick, onBareClick]);
+  }, [onEventClick]);
+
+  // Right-click / two-finger trackpad tap → Location Info panel.
+  // e.preventDefault() stops the browser's native context menu from appearing.
+  const handleContextMenu = useCallback((e) => {
+    e.preventDefault?.();
+    onBareClick?.(e.lngLat.lat, e.lngLat.lng);
+  }, [onBareClick]);
 
   // Distance line geojson
   const distanceGeojson = useMemo(() => {
@@ -338,6 +343,7 @@ const MapView = forwardRef(function MapView(
         fadeDuration={0}
         maxTileCacheSize={500}
         onClick={handleClick}
+        onContextMenu={handleContextMenu}
         onStyleData={onStyleData}
         onLoad={handleLoad}
         getCursor={(s) => s.isHovering ? 'pointer' : (s.isDragging ? 'grabbing' : 'grab')}
