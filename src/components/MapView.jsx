@@ -262,6 +262,9 @@ const MapView = forwardRef(function MapView(
     let starTicking  = false;
 
     map.on('move', () => {
+      // Sync canvas starfield bearing
+      window.__setStarfieldBearing?.(map.getBearing());
+
       if (!starfield || starTicking) return;
       starTicking = true;
       requestAnimationFrame(() => {
@@ -368,18 +371,15 @@ const MapView = forwardRef(function MapView(
         {geojsonData && (
           <Source id="events" type="geojson" data={geojsonData}
             cluster={true} clusterMaxZoom={4} clusterRadius={60}>
-            {/* Cluster circles */}
+            {/* Cluster circles — dark glass style */}
             <Layer id="clusters" type="circle"
               filter={['has', 'point_count']}
               paint={{
-                'circle-color': '#ffffff',
-                'circle-stroke-color': 'rgba(0,0,0,0.15)',
-                'circle-stroke-width': 1,
-                'circle-radius': [
-                  'step', ['get', 'point_count'],
-                  16, 5, 22, 20, 28
-                ],
-                'circle-opacity': 0.92,
+                'circle-color': 'rgba(255,255,255,0.08)',
+                'circle-stroke-color': 'rgba(255,255,255,0.35)',
+                'circle-stroke-width': 1.5,
+                'circle-radius': ['step', ['get', 'point_count'], 18, 5, 24, 20, 32],
+                'circle-opacity': 1,
               }} />
             {/* Cluster count labels */}
             <Layer id="cluster-count" type="symbol"
@@ -389,7 +389,7 @@ const MapView = forwardRef(function MapView(
                 'text-size': 12,
                 'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
               }}
-              paint={{ 'text-color': '#1c1c1e' }} />
+              paint={{ 'text-color': 'rgba(255,255,255,0.9)' }} />
             {/* Individual markers */}
             <Layer id="events-layer" type="circle"
               filter={['!', ['has', 'point_count']]}

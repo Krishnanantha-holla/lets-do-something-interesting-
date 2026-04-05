@@ -42,16 +42,52 @@ function parseCoords(str) {
 
 // ── Stats helpers ─────────────────────────────────────────────────────────────
 
+const US_STATES = ['Iowa','California','Texas','Florida','Oregon','Washington','Montana',
+  'Idaho','Colorado','Arizona','New Mexico','Georgia','Alaska','Hawaii','Nevada','Utah',
+  'Wyoming','Nebraska','Kansas','Oklahoma','Arkansas','Louisiana','Mississippi','Alabama',
+  'Tennessee','Kentucky','Indiana','Ohio','Michigan','Wisconsin','Minnesota','Illinois',
+  'Missouri','North Dakota','South Dakota','Virginia','West Virginia','Maryland','Delaware',
+  'Pennsylvania','New York','New Jersey','Connecticut','Rhode Island','Massachusetts',
+  'Vermont','New Hampshire','Maine','North Carolina','South Carolina'];
+
+const COUNTRY_KEYWORDS = [
+  'Afghanistan','Albania','Algeria','Angola','Argentina','Armenia','Australia','Austria',
+  'Azerbaijan','Bangladesh','Belarus','Bolivia','Brazil','Bulgaria','Cambodia','Cameroon',
+  'Canada','Chile','China','Colombia','Congo','Croatia','Czech','Denmark','Ecuador','Egypt',
+  'Ethiopia','Finland','France','Georgia','Germany','Ghana','Greece','Guatemala','Honduras',
+  'Hungary','India','Indonesia','Iran','Iraq','Israel','Italy','Japan','Jordan','Kazakhstan',
+  'Kenya','Kyrgyzstan','Laos','Lebanon','Libya','Madagascar','Malaysia','Mali','Mexico',
+  'Moldova','Mongolia','Morocco','Mozambique','Myanmar','Nepal','Netherlands','New Zealand',
+  'Nicaragua','Niger','Nigeria','North Korea','Norway','Pakistan','Panama','Papua','Paraguay',
+  'Peru','Philippines','Poland','Portugal','Romania','Russia','Rwanda','Saudi Arabia',
+  'Senegal','Serbia','Somalia','South Africa','South Korea','Spain','Sri Lanka','Sudan',
+  'Sweden','Syria','Taiwan','Tajikistan','Tanzania','Thailand','Tunisia','Turkey','Uganda',
+  'Ukraine','United Kingdom','United States','Uruguay','Uzbekistan','Venezuela','Vietnam',
+  'Yemen','Zambia','Zimbabwe',
+  ...US_STATES,
+];
+
 function countCountries(events) {
-  // Extract last word(s) from title that look like a country/region
-  const seen = new Set();
+  const found = new Set();
   events.forEach(ev => {
-    const parts = ev.title.replace(/\s+\d{6,}$/, '').split(/[,\s]+/);
-    // Take last 1-2 words as a rough country proxy
-    const key = parts.slice(-2).join(' ').trim();
-    if (key) seen.add(key);
+    const title = (ev.title || '').toLowerCase();
+    COUNTRY_KEYWORDS.forEach(kw => {
+      if (title.includes(kw.toLowerCase())) {
+        found.add(US_STATES.includes(kw) ? 'United States' : kw);
+      }
+    });
   });
-  return seen.size;
+  if (found.size < 3) {
+    // Fallback: count unique 30° grid cells as rough proxy
+    const cells = new Set();
+    events.forEach(ev => {
+      if (ev.lng != null && ev.lat != null) {
+        cells.add(`${Math.round(ev.lat / 30) * 30},${Math.round(ev.lng / 30) * 30}`);
+      }
+    });
+    return Math.min(cells.size * 4, 80);
+  }
+  return found.size;
 }
 
 function mostActiveCategory(events) {

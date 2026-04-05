@@ -47,27 +47,16 @@ html, body {
   width: 100vw; height: 100vh; position: relative; overflow: hidden;
 }
 .map-container {
-  width: 100%; height: 100%; position: absolute; top:0; left:0; z-index: 10;
+  position: fixed;
+  top: 0; left: 380px; right: 0; bottom: 0;
+  width: calc(100vw - 380px);
+  height: 100vh;
+  z-index: 10;
   background-color: transparent;
 }
 
 .starfield {
-  position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; z-index: -1;
-  background-color: #030408;
-  background-image: 
-    radial-gradient(1.5px 1.5px at 15% 25%, #ffffffcc, transparent),
-    radial-gradient(2px 2px at 45% 75%, #ffffff99, transparent),
-    radial-gradient(1px 1px at 85% 35%, #ffffffee, transparent),
-    radial-gradient(1.5px 1.5px at 65% 15%, #ffffff66, transparent),
-    radial-gradient(2.5px 2.5px at 95% 85%, #ffffffcc, transparent),
-    radial-gradient(1px 1px at 35% 55%, #ffffffaa, transparent),
-    radial-gradient(2.5px 2.5px at 75% 45%, #ffffffdd, transparent),
-    radial-gradient(1px 1px at 25% 65%, #ffffff99, transparent),
-    radial-gradient(2px 2px at 5% 95%, #ffffffcc, transparent),
-    radial-gradient(1.5px 1.5px at 55% 85%, #ffffffaa, transparent);
-  background-size: 350px 350px;
-  transform-origin: center center;
-  transition: transform 0s;
+  display: none; /* replaced by canvas starfield in main.jsx */
 }
 
 .maplibregl-canvas {
