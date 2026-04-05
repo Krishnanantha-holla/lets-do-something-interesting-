@@ -4,8 +4,7 @@ import {
   CloudLightning, Waves, Sun, Wind, ArrowDownCircle, Snowflake,
   Anchor, Thermometer, List, Eclipse, Satellite,
   Eye, EyeOff, ChevronDown, ChevronRight,
-} from 'lucide-react';
-import { CATEGORY_COLORS, CATEGORY_LABELS } from '../api';
+} from 'lucide-react';import { CATEGORY_COLORS, CATEGORY_LABELS } from '../api';
 import { useDebounce } from '../hooks/useDebounce';
 import DetailView from './DetailView';
 import DistanceTool from './DistanceTool';
@@ -210,6 +209,7 @@ export default function Sidebar({
   compoundCount,
   activeLayers, onToggleLayer,
   markersVisible, onToggleMarkers,
+  mobileOpen, onMobileClose,
 }) {
   const [tab,            setTab]            = useState('explore');
   const [measurePrefill, setMeasurePrefill] = useState(null);
@@ -280,7 +280,11 @@ export default function Sidebar({
   }, [searchPin, selectedEvent, onBack]);
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${mobileOpen ? ' mobile-open' : ''}`}>
+      {/* Mobile close button — hidden on desktop via CSS */}
+      <button className="sidebar-mobile-close" onClick={onMobileClose} aria-label="Close menu">
+        <X size={15} />
+      </button>
       {/* ── Header ── */}
       <div className="sidebar-header">
         {showDetail ? (

@@ -24,12 +24,12 @@ function toPin(item) {
 }
 
 function PointInput({ label, color, value, onSelect, onClear }) {
-  const [query, setQuery] = useState('');
+  const [query,   setQuery]   = useState('');
   const [results, setResults] = useState([]);
   const [focused, setFocused] = useState(false);
   const debounced = useDebounce(query, 400);
 
-  // Fetch results
+  // Fetch suggestions — never auto-select, only populate the dropdown
   useEffect(() => {
     if (!debounced || debounced.length < 2) { setResults([]); return; }
     const coords = parseCoords(debounced);
@@ -41,15 +41,17 @@ function PointInput({ label, color, value, onSelect, onClear }) {
     fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(debounced)}&limit=5`)
       .then(r => r.json())
       .then(data => {
-        if (!cancelled) setResults(data.map(d => ({ type: 'place', lat: parseFloat(d.lat), lng: parseFloat(d.lon), display: d.display_name })));
+        if (!cancelled) setResults(data.map(d => ({
+          type: 'place', lat: parseFloat(d.lat), lng: parseFloat(d.lon), display: d.display_name,
+        })));
       })
       .catch(() => { if (!cancelled) setResults([]); });
     return () => { cancelled = true; };
   }, [debounced]);
 
-
+  // Explicit selection only — called from click or Enter key
   const select = (item) => {
-    setQuery('');
+    setQuery(item.display.split(',')[0]);
     setResults([]);
     setFocused(false);
     onSelect(toPin(item));
@@ -75,7 +77,7 @@ function PointInput({ label, color, value, onSelect, onClear }) {
           onKeyDown={e => {
             if (e.key === 'Enter' && results.length > 0) {
               e.preventDefault();
-              select(results[0]);
+              select(results[0]); // Enter picks top result explicitly
             }
           }}
         />
@@ -86,11 +88,12 @@ function PointInput({ label, color, value, onSelect, onClear }) {
           📍 {value.name} ({value.latitude.toFixed(4)}, {value.longitude.toFixed(4)})
         </div>
       )}
-      {/* Dropdown — only shown while focused so user can override the auto-select */}
-      {results.length > 0 && focused && (
+      {/* Dropdown only while focused and no value confirmed yet */}
+      {results.length > 0 && focused && !value && (
         <div className="autocomplete-dropdown glass" style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200, marginTop: 4 }}>
           {results.map((r, i) => (
-            <button key={i} className="auto-item" onMouseDown={() => select(r)} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+            <button key={i} className="auto-item" onMouseDown={() => select(r)}
+              style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
               <span style={{ marginTop: '1px', display: 'flex' }}>
                 {r.type === 'coords' ? '📌' : <MapPin size={14} color={color} />}
               </span>

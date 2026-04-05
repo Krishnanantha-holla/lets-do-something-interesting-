@@ -15,7 +15,7 @@ export default function StyleMenu({ mapStyleKey, setMapStyleKey, is3D, onToggle3
   const pick = (key) => { setMapStyleKey(key); setOpen(false); };
 
   return (
-    <div style={{ position: 'absolute', top: 32, right: 32, zIndex: 40 }} ref={ref}>
+    <div className="style-menu-anchor" style={{ position: 'absolute', top: 32, right: 32, zIndex: 250 }} ref={ref}>
       <button className={`settings-btn ${open ? 'active' : ''}`} onClick={() => setOpen(v => !v)}>
         <Layers size={18} />
       </button>

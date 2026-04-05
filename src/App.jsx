@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { Menu, X as XIcon } from 'lucide-react';
 import { fetchEvents } from './api';
 import { useLocationData } from './hooks/useLocationData';
 import MapView from './components/MapView';
@@ -7,6 +8,7 @@ import Sidebar from './components/Sidebar';
 import StyleMenu from './components/StyleMenu';
 import CompoundPanel from './components/CompoundPanel';
 import MapClickPanel from './components/MapClickPanel';
+import SkeletonLoader from './components/SkeletonLoader';
 import { detectCompoundEvents, initCompoundLayer } from './layers/correlationEngine';
 function getEarthDistance(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -62,9 +64,11 @@ function saveSession(patch) {
 export default function App() {
   const mapRef          = useRef(null);
   const compoundCtrlRef = useRef(null);
+  const starfieldRef    = useRef(null);   // ref to the oversized starfield div
   const session         = useMemo(loadSession, []);
 
   // ── State ─────────────────────────────────────────────────────────────────
+  const [isMapLoaded,      setIsMapLoaded]       = useState(false);
   const [events,           setEvents]           = useState([]);
   const [eventsLoading,    setEventsLoading]     = useState(true);
   const [selectedEventId,  setSelectedEventId]   = useState(null);
@@ -77,9 +81,10 @@ export default function App() {
   const [activeLayers,     setActiveLayers]      = useState(() => session.activeLayers || {});
   const [mapClickInfo,     setMapClickInfo]      = useState(null);
   const [markersVisible,   setMarkersVisible]    = useState(true);
+  const [sidebarOpen,      setSidebarOpen]       = useState(false);
 
   const [theme,       setTheme]       = useState(() => localStorage.getItem('eonet_theme')     || 'light');
-  const [mapStyleKey, setMapStyleKey] = useState(() => localStorage.getItem('eonet_map_style') || 'light');
+  const [mapStyleKey, setMapStyleKey] = useState(() => localStorage.getItem('eonet_map_style') || 'hybrid');
   const [is3D,        setIs3D]        = useState(() => localStorage.getItem('eonet_is_3d') === 'true');
 
   const { weatherData, wikiData, loadingWeather, loadingWiki } = useLocationData(searchPin);
@@ -189,11 +194,36 @@ export default function App() {
   }, [events]);
 
   const handleFlyTo = useCallback((pin) => {
-    mapRef.current?.flyTo({
+    const map = mapRef.current;
+    if (!map) return;
+
+    // Fly to a high altitude first, then descend once tiles are loaded
+    map.flyTo({
       center: [pin.longitude, pin.latitude],
-      zoom: 16, padding: { left: 400 }, duration: 2500,
-      easing: t => t * (2 - t),
+      zoom: 14,           // slightly lower zoom — tiles load faster
+      pitch: 0,           // flatten during flight to reduce tile demand
+      padding: { left: 400 },
+      duration: 2200,
+      easing: t => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t, // ease-in-out
     });
+
+    // Once the camera stops moving, wait for the map to go idle (tiles painted)
+    // then ease to the final view state
+    const onMoveEnd = () => {
+      map.off('moveend', onMoveEnd);
+      const waitForIdle = () => {
+        if (map.isStyleLoaded() && map.areTilesLoaded()) {
+          map.easeTo({ zoom: 16, pitch: 45, duration: 800, easing: t => 1 - Math.pow(1 - t, 3) });
+        } else {
+          map.once('idle', () => {
+            map.easeTo({ zoom: 16, pitch: 45, duration: 800, easing: t => 1 - Math.pow(1 - t, 3) });
+          });
+        }
+      };
+      waitForIdle();
+    };
+    map.once('moveend', onMoveEnd);
+
     setSearchPin(pin);
     setSelectedEventId(null);
     setMapClickInfo(null);
@@ -259,7 +289,29 @@ export default function App() {
   return (
     <div className="map-wrapper">
       <div className="copy-toast" id="copy-toast">📋 Copied to clipboard</div>
-      <div className="starfield" id="starfield" />
+
+      {/* ── Part 2: Oversized dynamic starfield div ── */}
+      <div className="starfield-bg" ref={starfieldRef} />
+
+      {/* ── Part 1: Skeleton loader ── */}
+      <SkeletonLoader loaded={isMapLoaded} />
+
+      {/* Hamburger — mobile only, shown via CSS */}
+      <button
+        className="hamburger-btn"
+        onClick={() => setSidebarOpen(true)}
+        aria-label="Open menu"
+      >
+        <Menu size={20} />
+      </button>
+
+      {/* Backdrop — closes sidebar on tap outside */}
+      {sidebarOpen && (
+        <div
+          className="sidebar-backdrop"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
       <MapView
         ref={mapRef}
@@ -273,6 +325,8 @@ export default function App() {
         onDoubleTap={handleMapBareClick}
         measureA={measureA}
         measureB={measureB}
+        onMapLoaded={() => setIsMapLoaded(true)}
+        starfieldRef={starfieldRef}
       />
 
       <Sidebar
@@ -302,6 +356,8 @@ export default function App() {
         onToggleMarkers={() => setMarkersVisible(v => !v)}
         activeLayers={activeLayers}
         onToggleLayer={handleToggleLayer}
+        mobileOpen={sidebarOpen}
+        onMobileClose={() => setSidebarOpen(false)}
       />
 
       <StyleMenu

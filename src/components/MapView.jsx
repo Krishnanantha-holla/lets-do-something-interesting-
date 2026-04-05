@@ -32,7 +32,7 @@ class MomentumTracker {
 }
 
 const MapView = forwardRef(function MapView(
-  { mapStyle, geojsonData, searchPin, theme, is3D, onEventClick, onBareClick, onDoubleTap, measureA, measureB },
+  { mapStyle, geojsonData, searchPin, theme, is3D, onEventClick, onBareClick, onDoubleTap, measureA, measureB, onMapLoaded, starfieldRef },
   ref
 ) {
   const mapRef = useRef(null);
@@ -251,38 +251,26 @@ const MapView = forwardRef(function MapView(
       }
     });
 
-    // ── 6. Parallax starfield ─────────────────────────────────────────────
-    const starfield = document.getElementById('starfield');
-    let prevLng      = map.getCenter().lng;
-    let accLng       = prevLng;
-    let starTicking  = false;
-
+    // ── 6. Dynamic starfield — driven via ref, zero React re-renders ────────
     map.on('move', () => {
-      // Sync canvas starfield bearing
+      // Legacy canvas starfield (main.jsx)
       window.__setStarfieldBearing?.(map.getBearing());
 
-      if (!starfield || starTicking) return;
-      starTicking = true;
-      requestAnimationFrame(() => {
-        const center  = map.getCenter();
+      // New ref-based oversized starfield div
+      if (starfieldRef?.current) {
         const bearing = map.getBearing();
-        let delta = center.lng - prevLng;
-        if (delta > 180) delta -= 360;
-        else if (delta < -180) delta += 360;
-        accLng  += delta;
-        prevLng  = center.lng;
-        const x  = accLng * 8.5;
-        const y  = center.lat * -8.5;
-        starfield.style.transform = `rotate(${bearing}deg)`;
-        starfield.style.backgroundPosition = [0.2, 0.4, 0.7, 0.3, 0.8, 0.15, 1.0, 0.5, 0.6, 0.35]
-          .map(f => `${x * f}px ${y * f}px`)
-          .join(', ');
-        starTicking = false;
-      });
+        const pitch   = map.getPitch();
+        // Hardware-accelerated transform — no layout thrash
+        starfieldRef.current.style.transform =
+          `rotate(${bearing * 0.09}deg) translateY(${pitch * 0.6}px)`;
+      }
     });
 
-    // ── 7. Overlay layers (day/night, ISS, tectonic, aurora, currents) ────
+    // ── 7. Overlay layers ────────────────────────────────────────────────────
     overlayRef.current = initOverlayLayers(map);
+
+    // ── 8. Signal map ready on first idle ────────────────────────────────────
+    map.once('idle', () => { onMapLoaded?.(); });
 
   }, []);
 
@@ -338,7 +326,6 @@ const MapView = forwardRef(function MapView(
         maxPitch={85}
         mapStyle={mapStyle}
         interactiveLayerIds={['events-layer', 'clusters']}
-        // We handle all gestures manually — disable MapLibre defaults
         dragPan={false}
         scrollZoom={false}
         dragRotate={true}
@@ -347,6 +334,9 @@ const MapView = forwardRef(function MapView(
         touchZoomRotate={true}
         touchPitch={true}
         pitchWithRotate={false}
+        // Fix 2: retain parent LOD tiles until children are fully painted
+        fadeDuration={0}
+        maxTileCacheSize={500}
         onClick={handleClick}
         onStyleData={onStyleData}
         onLoad={handleLoad}
@@ -406,11 +396,23 @@ const MapView = forwardRef(function MapView(
           </Source>
         )}
 
-        {/* Distance measurement line */}
+        {/* Distance measurement line — draped over terrain */}
         {distanceGeojson && (
           <Source id="distance-line" type="geojson" data={distanceGeojson}>
-            <Layer id="distance-line-casing" type="line" paint={{ 'line-color': '#fff', 'line-width': 5, 'line-opacity': 0.6 }} />
-            <Layer id="distance-line-fill" type="line" paint={{ 'line-color': '#007aff', 'line-width': 2.5, 'line-dasharray': [4, 3] }} />
+            <Layer id="distance-line-casing" type="line"
+              layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+              paint={{
+                'line-color': '#fff',
+                'line-width': 5,
+                'line-opacity': 0.5,
+              }} />
+            <Layer id="distance-line-fill" type="line"
+              layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+              paint={{
+                'line-color': '#007aff',
+                'line-width': 2.5,
+                'line-dasharray': [4, 3],
+              }} />
           </Source>
         )}
         {measureA && (
