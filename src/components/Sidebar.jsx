@@ -2,16 +2,13 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   Search, Activity, X, Globe, Ruler, Zap, Flame, Mountain,
   CloudLightning, Waves, Sun, Wind, ArrowDownCircle, Snowflake,
-  Anchor, Thermometer, List, Eclipse, Satellite, Sparkles, Users, Compass, Download,
+  Anchor, Thermometer, List, Eclipse, Satellite,
   Eye, EyeOff, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { CATEGORY_COLORS, CATEGORY_LABELS } from '../api';
 import { useDebounce } from '../hooks/useDebounce';
 import DetailView from './DetailView';
 import DistanceTool from './DistanceTool';
-import ReplayBar from './ReplayBar';
-import TimeMachineBar from './TimeMachineBar';
-import ExportModal from './ExportModal';
 
 const CATEGORY_ICONS = {
   wildfires: Flame, volcanoes: Mountain, severeStorms: CloudLightning,
@@ -21,15 +18,9 @@ const CATEGORY_ICONS = {
 };
 
 const OVERLAY_LAYERS = [
-  { key: 'daynight',   label: 'Day / Night',         icon: Eclipse   },
-  { key: 'iss',        label: 'ISS Tracker',          icon: Satellite },
-  { key: 'tectonic',   label: 'Tectonic Plates',      icon: Mountain  },
-  { key: 'aurora',     label: 'Aurora Forecast',      icon: Sparkles  },
-  { key: 'currents',   label: 'Ocean Currents',       icon: Waves     },
-  { key: 'faults',     label: 'Fault Lines',          icon: Mountain  },
-  { key: 'population', label: 'Population Density',   icon: Users     },
-  { key: 'firms',      label: 'FIRMS Wildfires',      icon: Flame     },
-  { key: 'magdecl',    label: 'Magnetic Declination', icon: Compass   },
+  { key: 'daynight',  label: 'Day / Night',     icon: Eclipse  },
+  { key: 'iss',       label: 'ISS Tracker',      icon: Satellite },
+  { key: 'tectonic',  label: 'Tectonic Plates',  icon: Mountain  },
 ];
 
 function parseCoords(str) {
@@ -217,18 +208,16 @@ export default function Sidebar({
   onFlyTo, onBack, onShare,
   onMeasure, onMeasureClear,
   compoundCount,
-  activeLayers, onToggleLayer, firmsCount,
-  mapRef, onHideLive, onShowLive,
+  activeLayers, onToggleLayer,
   markersVisible, onToggleMarkers,
 }) {
-  const [tab,           setTab]           = useState('explore');
-  const [measurePrefill,setMeasurePrefill]= useState(null);
-  const [searchQuery,   setSearchQuery]   = useState('');
-  const [geocoderResults,setGeocoderResults] = useState([]);
-  const [feedOpen,      setFeedOpen]      = useState(false);
-  const [showExport,    setShowExport]    = useState(false);
-  const [layersOpen,    setLayersOpen]    = useState(false); // collapsed by default
-  const [lastUpdated]                     = useState(formatLastUpdated);
+  const [tab,            setTab]            = useState('explore');
+  const [measurePrefill, setMeasurePrefill] = useState(null);
+  const [searchQuery,    setSearchQuery]    = useState('');
+  const [geocoderResults,setGeocoderResults]= useState([]);
+  const [feedOpen,       setFeedOpen]       = useState(false);
+  const [layersOpen,     setLayersOpen]     = useState(false);
+  const [lastUpdated]                       = useState(formatLastUpdated);
   const drawerRef = useRef(null);
   const debouncedQuery = useDebounce(searchQuery, 350);
 
@@ -292,9 +281,6 @@ export default function Sidebar({
 
   return (
     <aside className="sidebar">
-      {showExport && (
-        <ExportModal events={events || []} onClose={() => setShowExport(false)} />
-      )}
       {/* ── Header ── */}
       <div className="sidebar-header">
         {showDetail ? (
@@ -432,9 +418,7 @@ export default function Sidebar({
                       onClick={() => onToggleLayer?.(key)}
                     >
                       <Icon size={14} />
-                      <span style={{ flex: 1 }}>
-                        {label}{key === 'firms' && firmsCount > 0 ? ` (${firmsCount.toLocaleString()})` : ''}
-                      </span>
+                      <span style={{ flex: 1 }}>{label}</span>
                       <span className={`layer-pill ${activeLayers?.[key] ? 'on' : 'off'}`}>
                         {activeLayers?.[key] ? 'ON' : 'OFF'}
                       </span>
@@ -442,22 +426,6 @@ export default function Sidebar({
                   ))}
                 </div>
               )}
-            </div>
-
-            {/* ── Tools ── */}
-            <div className="sidebar-tools-section">
-              <div className="section-label" style={{ marginBottom: 8 }}>Tools</div>
-              <div className="sidebar-tools-grid">
-                <ReplayBar mapRef={mapRef} onHideLive={onHideLive} onShowLive={onShowLive} inline />
-                <TimeMachineBar mapRef={mapRef} onHideLive={onHideLive} onShowLive={onShowLive} inline />
-                <button className="tool-card-btn" onClick={() => setShowExport(true)}>
-                  <Download size={16} color="var(--accent)" />
-                  <div>
-                    <div className="tool-card-title">Export Events</div>
-                    <div className="tool-card-sub">GeoJSON or PDF report</div>
-                  </div>
-                </button>
-              </div>
             </div>
           </>
         )}

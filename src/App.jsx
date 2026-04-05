@@ -8,7 +8,6 @@ import StyleMenu from './components/StyleMenu';
 import CompoundPanel from './components/CompoundPanel';
 import MapClickPanel from './components/MapClickPanel';
 import { detectCompoundEvents, initCompoundLayer } from './layers/correlationEngine';
-
 function getEarthDistance(lat1, lon1, lat2, lon2) {
   const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -68,7 +67,6 @@ export default function App() {
   // ── State ─────────────────────────────────────────────────────────────────
   const [events,           setEvents]           = useState([]);
   const [eventsLoading,    setEventsLoading]     = useState(true);
-  const [liveHidden,       setLiveHidden]        = useState(false);
   const [selectedEventId,  setSelectedEventId]   = useState(null);
   const [searchPin,        setSearchPin]         = useState(null);
   const [activeCategories, setActiveCategories]  = useState(() => session.activeCategories || []);
@@ -77,7 +75,6 @@ export default function App() {
   const [compoundEvents,   setCompoundEvents]    = useState([]);
   const [selectedCompound, setSelectedCompound]  = useState(null);
   const [activeLayers,     setActiveLayers]      = useState(() => session.activeLayers || {});
-  const [firmsCount,       setFirmsCount]        = useState(0);
   const [mapClickInfo,     setMapClickInfo]      = useState(null);
   const [markersVisible,   setMarkersVisible]    = useState(true);
 
@@ -224,8 +221,6 @@ export default function App() {
     setActiveLayers(prev => {
       const next = !prev[key];
       mapRef.current?.toggleLayer(key, next);
-      if (key === 'firms' && next)
-        setTimeout(() => mapRef.current?.setFirmsCountCallback(setFirmsCount), 500);
       return { ...prev, [key]: next };
     });
   }, []);
@@ -269,7 +264,7 @@ export default function App() {
       <MapView
         ref={mapRef}
         mapStyle={currentMapStyle}
-        geojsonData={liveHidden || !markersVisible ? null : geojsonData}
+        geojsonData={!markersVisible ? null : geojsonData}
         searchPin={searchPin}
         theme={theme}
         is3D={is3D}
@@ -307,10 +302,6 @@ export default function App() {
         onToggleMarkers={() => setMarkersVisible(v => !v)}
         activeLayers={activeLayers}
         onToggleLayer={handleToggleLayer}
-        firmsCount={firmsCount}
-        mapRef={mapRef}
-        onHideLive={() => setLiveHidden(true)}
-        onShowLive={() => setLiveHidden(false)}
       />
 
       <StyleMenu

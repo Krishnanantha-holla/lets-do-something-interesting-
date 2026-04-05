@@ -39,16 +39,12 @@ const MapView = forwardRef(function MapView(
   const overlayRef = useRef(null);
 
   useImperativeHandle(ref, () => ({
-    flyTo:                (opts) => mapRef.current?.flyTo(opts),
-    easeTo:               (opts) => mapRef.current?.easeTo(opts),
-    getZoom:              ()     => mapRef.current?.getZoom(),
-    fitBounds:            (bounds, opts) => mapRef.current?.fitBounds(bounds, opts),
-    toggleLayer:          (name, visible) => overlayRef.current?.toggle(name, visible),
-    getPopulationEstimate:(lng, lat) => overlayRef.current?.getPopulationEstimate(lng, lat),
-    getFirmsCount:        () => overlayRef.current?.getFirmsCount(),
-    setFirmsCountCallback:(fn) => overlayRef.current?.setFirmsCountCallback(fn),
-    reinitFirms:          (key, evs) => overlayRef.current?.reinitFirms(key, evs),
-    getRawMap:            () => mapRef.current?.getMap?.() ?? null,
+    flyTo:       (opts) => mapRef.current?.flyTo(opts),
+    easeTo:      (opts) => mapRef.current?.easeTo(opts),
+    getZoom:     ()     => mapRef.current?.getZoom(),
+    fitBounds:   (bounds, opts) => mapRef.current?.fitBounds(bounds, opts),
+    toggleLayer: (name, visible) => overlayRef.current?.toggle(name, visible),
+    getRawMap:   () => mapRef.current?.getMap?.() ?? null,
   }));
 
   const onStyleData = useCallback((e) => {
