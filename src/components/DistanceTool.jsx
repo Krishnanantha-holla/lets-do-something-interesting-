@@ -103,10 +103,15 @@ function PointInput({ label, color, value, onSelect, onClear }) {
   );
 }
 
-export default function DistanceTool({ onMeasure, onClear }) {
-  const [pointA, setPointA] = useState(null);
+export default function DistanceTool({ onMeasure, onClear, prefillA }) {
+  const [pointA, setPointA] = useState(prefillA || null);
   const [pointB, setPointB] = useState(null);
   const [result, setResult] = useState(null);
+
+  // Apply prefill when it changes (e.g. "Distance from here" button)
+  useEffect(() => {
+    if (prefillA) { setPointA(prefillA); setResult(null); onClear(); }
+  }, [prefillA]);
 
   const calculate = () => {
     if (!pointA || !pointB) return;

@@ -5,6 +5,10 @@ import { useLocationData } from './hooks/useLocationData';
 import MapView from './components/MapView';
 import Sidebar from './components/Sidebar';
 import StyleMenu from './components/StyleMenu';
+import ReplayBar from './components/ReplayBar';
+import TimeMachineBar from './components/TimeMachineBar';
+import CompoundPanel from './components/CompoundPanel';
+import { detectCompoundEvents, initCompoundLayer } from './layers/correlationEngine';
 
 function getEarthDistance(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -49,7 +53,12 @@ export default function App() {
   const mapRef = useRef(null);
 
   const [events, setEvents] = useState([]);
+  const [eventsLoading, setEventsLoading] = useState(true);
+  const [liveHidden, setLiveHidden] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState(null);
+  const [compoundEvents, setCompoundEvents] = useState([]);
+  const [selectedCompound, setSelectedCompound] = useState(null);
+  const compoundCtrlRef = useRef(null);
   const [searchPin, setSearchPin] = useState(null);
   const [activeCategories, setActiveCategories] = useState([]);
   const [measureA, setMeasureA] = useState(null);
@@ -72,13 +81,34 @@ export default function App() {
   // Load events
   useEffect(() => {
     fetchEvents()
-      .then(data => setEvents([...data].sort((a, b) => a.startTime - b.startTime)))
-      .catch(() => {});
+      .then(data => {
+        const sorted = [...data].sort((a, b) => a.startTime - b.startTime);
+        setEvents(sorted);
+        setEventsLoading(false);
+        // Run compound event detection after events load
+        const compounds = detectCompoundEvents(sorted);
+        setCompoundEvents(compounds);
+      })
+      .catch(() => { setEventsLoading(false); });
   }, []);
 
-  const selectedEvent = useMemo(() => events.find(e => e.id === selectedEventId), [selectedEventId, events]);
+  // Init compound layer once both map and events are ready
+  useEffect(() => {
+    if (!compoundEvents.length || !mapRef.current) return;
+    // Small delay to ensure map layers are initialized
+    const t = setTimeout(() => {
+      try {
+        compoundCtrlRef.current?.destroy();
+        // Access raw map via the ref chain
+        const rawMap = mapRef.current?._rawMap;
+        if (!rawMap) return;
+        compoundCtrlRef.current = initCompoundLayer(rawMap, compoundEvents, setSelectedCompound);
+      } catch (e) { console.warn('[compound] init failed:', e); }
+    }, 2000);
+    return () => clearTimeout(t);
+  }, [compoundEvents]);
 
-  const filteredEvents = useMemo(() => {
+  const selectedEvent = useMemo(() => events.find(e => e.id === selectedEventId), [selectedEventId, events]);
     let result = events;
     if (activeCategories.length > 0) result = result.filter(e => activeCategories.includes(e.categoryId));
     if (searchPin) result = result.filter(e => getEarthDistance(searchPin.latitude, searchPin.longitude, e.lat, e.lng) <= 1500);
@@ -117,7 +147,6 @@ export default function App() {
       duration: 1200,
     });
   }, [events]);
-
   const handleFlyTo = useCallback((pin) => {
     mapRef.current?.flyTo({
       center: [pin.longitude, pin.latitude],
@@ -188,7 +217,7 @@ export default function App() {
       <MapView
         ref={mapRef}
         mapStyle={currentMapStyle}
-        geojsonData={geojsonData}
+        geojsonData={liveHidden ? null : geojsonData}
         searchPin={searchPin}
         theme={theme}
         is3D={is3D}
@@ -208,6 +237,7 @@ export default function App() {
         onToggleCategory={catId => setActiveCategories(prev => prev.includes(catId) ? prev.filter(c => c !== catId) : [...prev, catId])}
         activeEventCount={activeEventCount}
         events={filteredEvents}
+        eventsLoading={eventsLoading}
         onEventClick={handleEventClick}
         onFlyTo={handleFlyTo}
         onBack={handleBack}
@@ -223,6 +253,21 @@ export default function App() {
         onToggle3D={handleToggle3D}
         theme={theme}
         onToggleTheme={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
+        mapRef={mapRef}
+      />
+
+      {/* Feature 1: Replay animator */}
+      <ReplayBar
+        mapRef={mapRef}
+        onHideLive={() => setLiveHidden(true)}
+        onShowLive={() => setLiveHidden(false)}
+      />
+
+      {/* Feature 4: Time Machine */}
+      <TimeMachineBar
+        mapRef={mapRef}
+        onHideLive={() => setLiveHidden(true)}
+        onShowLive={() => setLiveHidden(false)}
       />
     </div>
   );

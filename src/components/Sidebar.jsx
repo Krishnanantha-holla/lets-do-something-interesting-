@@ -32,12 +32,13 @@ export default function Sidebar({
   searchPin, selectedEvent,
   wikiData, weatherData, loadingWiki, loadingWeather,
   activeCategories, onToggleCategory,
-  activeEventCount,
+  activeEventCount, eventsLoading,
   events, onEventClick,
   onFlyTo, onBack, onShare,
   onMeasure, onMeasureClear,
 }) {
-  const [tab, setTab] = useState('explore'); // 'explore' | 'measure'
+  const [tab, setTab] = useState('explore');
+  const [measurePrefill, setMeasurePrefill] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [geocoderResults, setGeocoderResults] = useState([]);
   const debouncedQuery = useDebounce(searchQuery, 350);
@@ -79,6 +80,18 @@ export default function Sidebar({
   };
 
   const showDetail = searchPin || selectedEvent;
+
+  const handleMeasureFromHere = useCallback(() => {
+    const pin = searchPin
+      ? { latitude: searchPin.latitude, longitude: searchPin.longitude, name: searchPin.name, full_name: searchPin.full_name }
+      : selectedEvent
+        ? { latitude: selectedEvent.lat, longitude: selectedEvent.lng, name: selectedEvent.title.replace(/\s+\d{6,}$/, ''), full_name: selectedEvent.categoryTitle }
+        : null;
+    if (!pin) return;
+    setMeasurePrefill(pin);
+    onBack();           // go back to main view
+    setTab('measure');  // switch to measure tab
+  }, [searchPin, selectedEvent, onBack]);
 
   return (
     <aside className="sidebar">
@@ -149,20 +162,20 @@ export default function Sidebar({
             weatherData={weatherData}
             loadingWiki={loadingWiki}
             loadingWeather={loadingWeather}
-            onShare={onShare}
+            onMeasureFromHere={handleMeasureFromHere}
           />
         ) : tab === 'measure' ? (
-          <DistanceTool onMeasure={onMeasure} onClear={onMeasureClear} />
+          <DistanceTool onMeasure={onMeasure} onClear={onMeasureClear} prefillA={measurePrefill} />
         ) : (
           <>
             {/* Active events badge */}
             <div className="stat-badge">
               <span className="live-dot" />
               <Activity size={13} color="var(--accent)" />
-              <span>{activeEventCount} active events</span>
+              <span>{eventsLoading ? '—' : activeEventCount} active events</span>
             </div>
 
-            {/* Horizontal Filter Chips */}
+            {/* Horizontal Filter Chips — rendered outside scroll so no clipping */}
             <div className="filter-scroll">
               {Object.entries(CATEGORY_LABELS).map(([catId, label]) => {
                 const active = activeCategories.includes(catId);
@@ -181,30 +194,36 @@ export default function Sidebar({
             </div>
 
             {/* Event Feed */}
-            <div className="section-label" style={{ marginTop: 12, marginBottom: 8 }}>Latest Activity Feed</div>
-            <div className="event-feed">
-              {events && events.slice(0, 100).map(ev => {
-                const Icon = CATEGORY_ICONS[ev.categoryId] || Flame;
-                const d = new Date(ev.startTime);
-                const dateStr = !isNaN(d) ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recent';
-                return (
-                  <div key={ev.id} className="event-feed-card" onClick={() => onEventClick(ev.id)} style={{ '--cat-color': ev.color }}>
-                    <div className="event-card-top">
-                      <div className="event-cat-badge" style={{ backgroundColor: `${ev.color}22`, color: ev.color }}>
-                        <Icon size={12} strokeWidth={2.5} /> <span>{ev.categoryTitle}</span>
+            <div className="section-label" style={{ marginTop: 4, marginBottom: 8 }}>Latest Activity Feed</div>
+            {eventsLoading ? (
+              <div style={{ color: 'var(--muted)', fontSize: '0.85rem', padding: '12px 0' }}>Loading events…</div>
+            ) : (
+              <div className="event-feed">
+                {events && events.slice().reverse().slice(0, 100).map(ev => {
+                  const Icon = CATEGORY_ICONS[ev.categoryId] || Flame;
+                  const d = new Date(ev.startTime);
+                  const dateStr = !isNaN(d) ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recent';
+                  // Strip trailing NASA numeric IDs e.g. "Wildfire in Australia 1027837"
+                  const cleanTitle = ev.title.replace(/\s+\d{6,}$/, '');
+                  return (
+                    <div key={ev.id} className="event-feed-card" onClick={() => onEventClick(ev.id)} style={{ '--cat-color': ev.color }}>
+                      <div className="event-card-top">
+                        <div className="event-cat-badge" style={{ backgroundColor: `${ev.color}22`, color: ev.color }}>
+                          <Icon size={12} strokeWidth={2.5} /> <span>{ev.categoryTitle}</span>
+                        </div>
+                        <div className="event-date">{dateStr}</div>
                       </div>
-                      <div className="event-date">{dateStr}</div>
+                      <div className="event-card-title">{cleanTitle}</div>
+                      {ev.status === 'open' && (
+                        <div className="event-status-live">
+                          <span className="live-dot-small" /> Active Now
+                        </div>
+                      )}
                     </div>
-                    <div className="event-card-title">{ev.title}</div>
-                    {ev.status === 'open' && (
-                      <div className="event-status-live">
-                        <span className="live-dot-small" /> Active Now
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </>
         )}
       </div>

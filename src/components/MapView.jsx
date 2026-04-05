@@ -1,6 +1,7 @@
 import React, { useRef, useCallback, useImperativeHandle, forwardRef, useMemo } from 'react';
 import Map, { Source, Layer, NavigationControl, Marker, FullscreenControl, ScaleControl } from 'react-map-gl/maplibre';
 import { MapPin } from 'lucide-react';
+import { initOverlayLayers } from '../layers/overlayLayers';
 
 // ─── Easing ──────────────────────────────────────────────────────────────────
 // Exponential-out: fast start, silky deceleration (Apple Maps feel)
@@ -35,12 +36,18 @@ const MapView = forwardRef(function MapView(
   ref
 ) {
   const mapRef = useRef(null);
+  const overlayRef = useRef(null);
 
   useImperativeHandle(ref, () => ({
-    flyTo:   (opts) => mapRef.current?.flyTo(opts),
-    easeTo:  (opts) => mapRef.current?.easeTo(opts),
-    getZoom: ()     => mapRef.current?.getZoom(),
-    fitBounds: (bounds, opts) => mapRef.current?.fitBounds(bounds, opts),
+    flyTo:                (opts) => mapRef.current?.flyTo(opts),
+    easeTo:               (opts) => mapRef.current?.easeTo(opts),
+    getZoom:              ()     => mapRef.current?.getZoom(),
+    fitBounds:            (bounds, opts) => mapRef.current?.fitBounds(bounds, opts),
+    toggleLayer:          (name, visible) => overlayRef.current?.toggle(name, visible),
+    getPopulationEstimate:(lng, lat) => overlayRef.current?.getPopulationEstimate(lng, lat),
+    getFirmsCount:        () => overlayRef.current?.getFirmsCount(),
+    setFirmsCountCallback:(fn) => overlayRef.current?.setFirmsCountCallback(fn),
+    reinitFirms:          (key, evs) => overlayRef.current?.reinitFirms(key, evs),
   }));
 
   const onStyleData = useCallback((e) => {
@@ -254,10 +261,32 @@ const MapView = forwardRef(function MapView(
       });
     });
 
+    // ── 7. Overlay layers (day/night, ISS, tectonic, aurora, currents) ────
+    overlayRef.current = initOverlayLayers(map);
+
   }, []);
 
   const handleClick = useCallback((e) => {
-    if (e.features?.length > 0) onEventClick(e.features[0].properties.id);
+    if (!e.features?.length) return;
+    const f = e.features[0];
+    // Cluster click → zoom in
+    if (f.properties?.cluster_id) {
+      const map = mapRef.current;
+      if (!map) return;
+      // get the raw maplibre source to call getClusterExpansionZoom
+      const src = map._mapRef?.current?.getSource?.('events') || null;
+      if (src?.getClusterExpansionZoom) {
+        src.getClusterExpansionZoom(f.properties.cluster_id, (err, zoom) => {
+          if (err) return;
+          map.flyTo({ center: f.geometry.coordinates, zoom: zoom + 0.5, duration: 800 });
+        });
+      } else {
+        map.flyTo({ center: f.geometry.coordinates, zoom: (map.getZoom() || 2) + 2, duration: 800 });
+      }
+      return;
+    }
+    // Individual event click
+    if (f.properties?.id) onEventClick(f.properties.id);
   }, [onEventClick]);
 
   // Distance line geojson
@@ -287,7 +316,7 @@ const MapView = forwardRef(function MapView(
         minZoom={1} maxZoom={22}
         maxPitch={85}
         mapStyle={mapStyle}
-        interactiveLayerIds={['events-layer']}
+        interactiveLayerIds={['events-layer', 'clusters']}
         // We handle all gestures manually — disable MapLibre defaults
         dragPan={false}
         scrollZoom={false}
@@ -315,19 +344,47 @@ const MapView = forwardRef(function MapView(
         )}
 
         {geojsonData && (
-          <Source id="events" type="geojson" data={geojsonData}>
-            <Layer id="events-layer" type="circle" paint={{
-              'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 2.5, 4, 5, 12, 10],
-              'circle-color': ['get', 'color'],
-              'circle-stroke-width': 1,
-              'circle-stroke-color': theme === 'dark' ? '#111' : '#FFF',
-            }} />
-            <Layer id="events-pulse" type="circle" filter={['==', ['get', 'status'], 'open']} paint={{
-              'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 2.5, 4, 15, 12, 35],
-              'circle-color': ['get', 'color'],
-              'circle-opacity': 0.15,
-              'circle-stroke-width': 0,
-            }} />
+          <Source id="events" type="geojson" data={geojsonData}
+            cluster={true} clusterMaxZoom={4} clusterRadius={60}>
+            {/* Cluster circles */}
+            <Layer id="clusters" type="circle"
+              filter={['has', 'point_count']}
+              paint={{
+                'circle-color': '#ffffff',
+                'circle-stroke-color': 'rgba(0,0,0,0.15)',
+                'circle-stroke-width': 1,
+                'circle-radius': [
+                  'step', ['get', 'point_count'],
+                  16, 5, 22, 20, 28
+                ],
+                'circle-opacity': 0.92,
+              }} />
+            {/* Cluster count labels */}
+            <Layer id="cluster-count" type="symbol"
+              filter={['has', 'point_count']}
+              layout={{
+                'text-field': '{point_count_abbreviated}',
+                'text-size': 12,
+                'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+              }}
+              paint={{ 'text-color': '#1c1c1e' }} />
+            {/* Individual markers */}
+            <Layer id="events-layer" type="circle"
+              filter={['!', ['has', 'point_count']]}
+              paint={{
+                'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 2.5, 4, 5, 12, 10],
+                'circle-color': ['get', 'color'],
+                'circle-stroke-width': 1,
+                'circle-stroke-color': theme === 'dark' ? '#111' : '#FFF',
+              }} />
+            <Layer id="events-pulse" type="circle"
+              filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'status'], 'open']]}
+              paint={{
+                'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 2.5, 4, 15, 12, 35],
+                'circle-color': ['get', 'color'],
+                'circle-opacity': 0.15,
+                'circle-stroke-width': 0,
+              }} />
           </Source>
         )}
 
