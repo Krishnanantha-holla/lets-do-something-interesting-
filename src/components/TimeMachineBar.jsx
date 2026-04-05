@@ -5,7 +5,7 @@ import { createTimeMachineController } from '../layers/timeMachine';
 const TODAY = new Date().toISOString().split('T')[0];
 const MIN_DATE = '2015-01-01';
 
-export default function TimeMachineBar({ mapRef, onHideLive, onShowLive }) {
+export default function TimeMachineBar({ mapRef, onHideLive, onShowLive, inline }) {
   const [open, setOpen]     = useState(false);
   const [date, setDate]     = useState('');
   const [loading, setLoading] = useState(false);
@@ -46,6 +46,17 @@ export default function TimeMachineBar({ mapRef, onHideLive, onShowLive }) {
   };
 
   if (!open) {
+    if (inline) {
+      return (
+        <button className="tool-card-btn" onClick={() => setOpen(true)}>
+          <Clock size={16} color="#bf5af2" />
+          <div>
+            <div className="tool-card-title" style={{ color: '#bf5af2' }}>Time Machine</div>
+            <div className="tool-card-sub">View any past date</div>
+          </div>
+        </button>
+      );
+    }
     return (
       <button className="replay-fab tm-fab" onClick={() => setOpen(true)} title="Time Machine">
         <Clock size={17} />
@@ -54,8 +65,10 @@ export default function TimeMachineBar({ mapRef, onHideLive, onShowLive }) {
     );
   }
 
+  const wrapper = inline ? 'replay-bar-inline' : 'replay-bar glass tm-bar';
+
   return (
-    <div className="replay-bar glass tm-bar">
+    <div className={wrapper}>
       <div className="replay-row">
         <Clock size={15} color="#bf5af2" />
         <span className="replay-title" style={{ color: '#bf5af2' }}>Time Machine</span>

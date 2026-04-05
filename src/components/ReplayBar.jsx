@@ -5,7 +5,7 @@ import { fetchReplayEvents, createReplayController } from '../layers/replayAnima
 const YEARS = Array.from({ length: 10 }, (_, i) => 2024 - i); // 2024..2015
 const SPEEDS = ['0.5', '1', '2', '5'];
 
-export default function ReplayBar({ mapRef, onHideLive, onShowLive }) {
+export default function ReplayBar({ mapRef, onHideLive, onShowLive, inline }) {
   const [open, setOpen]       = useState(false);
   const [year, setYear]       = useState(2023);
   const [playing, setPlaying] = useState(false);
@@ -81,6 +81,18 @@ export default function ReplayBar({ mapRef, onHideLive, onShowLive }) {
   };
 
   if (!open) {
+    // Inline mode: compact card button inside sidebar
+    if (inline) {
+      return (
+        <button className="tool-card-btn" onClick={() => setOpen(true)}>
+          <History size={16} color="var(--accent)" />
+          <div>
+            <div className="tool-card-title">Year Replay</div>
+            <div className="tool-card-sub">Animate past events</div>
+          </div>
+        </button>
+      );
+    }
     return (
       <button className="replay-fab" onClick={() => setOpen(true)} title="Year Replay">
         <History size={17} />
@@ -89,8 +101,10 @@ export default function ReplayBar({ mapRef, onHideLive, onShowLive }) {
     );
   }
 
+  const wrapper = inline ? 'replay-bar-inline' : 'replay-bar glass';
+
   return (
-    <div className="replay-bar glass">
+    <div className={wrapper}>
       <div className="replay-row">
         <History size={15} color="var(--accent)" />
         <span className="replay-title">Year Replay</span>

@@ -88,6 +88,7 @@ function normalizeEvent(event) {
   return {
     id: event.id || crypto.randomUUID(),
     title: event.title || "Untitled event",
+    description: event.description || null,
     categoryId,
     categoryTitle: category.title || CATEGORY_LABELS[categoryId] || "Other",
     color: CATEGORY_COLORS[categoryId] || "#AAAAAA",
@@ -98,7 +99,10 @@ function normalizeEvent(event) {
     startTime: geometries[0].date.getTime(),
     endTime: geometries[geometries.length - 1].date.getTime(),
     lng: geometries[geometries.length - 1].coordinates[0],
-    lat: geometries[geometries.length - 1].coordinates[1]
+    lat: geometries[geometries.length - 1].coordinates[1],
+    // EONET v3: magnitude data (e.g. wind speed in knots, fire area in acres)
+    magnitudeValue: event.geometry?.[0]?.magnitudeValue ?? null,
+    magnitudeUnit:  event.geometry?.[0]?.magnitudeUnit  ?? null,
   };
 }
 

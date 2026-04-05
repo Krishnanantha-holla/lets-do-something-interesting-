@@ -440,18 +440,36 @@ function initOceanCurrents(map) {
 
 export function initOverlayLayers(map) {
   const controllers = {};
+  let ready = false;
+  const pending = []; // queued toggle calls before init completes
 
-  // Wait for style to be fully loaded before adding layers
   const init = () => {
-    controllers.daynight  = initDayNight(map);
-    controllers.iss       = initISS(map);
-    controllers.tectonic  = initTectonic(map);
-    controllers.aurora    = initAurora(map);
-    controllers.currents  = initOceanCurrents(map);
-    controllers.faults    = initFaultLines(map);
+    ready = true;
+    controllers.daynight   = initDayNight(map);
+    controllers.iss        = initISS(map);
+    controllers.tectonic   = initTectonic(map);
+    controllers.aurora     = initAurora(map);
+    controllers.currents   = initOceanCurrents(map);
+    controllers.faults     = initFaultLines(map);
     controllers.population = initPopulationHeatmap(map);
-    controllers.firms     = initFirmsTracker(map, null, []); // key + events injected later
-    initMagDeclination(map).then(ctrl => { controllers.magdecl = ctrl; });
+    controllers.firms      = initFirmsTracker(map, null, []);
+    initMagDeclination(map).then(ctrl => {
+      controllers.magdecl = ctrl;
+      // Flush any pending magdecl toggles
+      pending.filter(p => p.name === 'magdecl').forEach(p => {
+        setVisibility(map, ctrl.layers, p.visible);
+        ctrl.onVisibilityChange?.(p.visible);
+      });
+    });
+    // Flush pending toggles for non-async layers
+    pending.forEach(({ name, visible }) => {
+      if (name === 'magdecl') return; // handled above
+      const ctrl = controllers[name];
+      if (!ctrl) return;
+      setVisibility(map, ctrl.layers, visible);
+      ctrl.onVisibilityChange?.(visible);
+    });
+    pending.length = 0;
   };
 
   if (map.isStyleLoaded()) {
@@ -461,27 +479,20 @@ export function initOverlayLayers(map) {
   }
 
   return {
-    /**
-     * toggle(name, visible)
-     * name: 'daynight' | 'iss' | 'tectonic' | 'aurora' | 'currents' | 'faults' | 'population' | 'firms' | 'magdecl'
-     */
     toggle(name, visible) {
+      if (!ready) { pending.push({ name, visible }); return; }
       const ctrl = controllers[name];
-      if (!ctrl) return;
+      if (!ctrl) { pending.push({ name, visible }); return; } // e.g. magdecl still loading
       setVisibility(map, ctrl.layers, visible);
       ctrl.onVisibilityChange?.(visible);
     },
-    getPopulationEstimate(lng, lat) {
-      return getPopulationEstimate(map, lng, lat);
-    },
-    getFirmsCount() { return controllers.firms?.getCount?.() ?? 0; },
-    setFirmsCountCallback(fn) { controllers.firms?.setOnCountUpdate?.(fn); },
-    reinitFirms(apiKey, eonetWildfires) {
+    getPopulationEstimate(lng, lat) { return getPopulationEstimate(map, lng, lat); },
+    getFirmsCount()          { return controllers.firms?.getCount?.() ?? 0; },
+    setFirmsCountCallback(fn){ controllers.firms?.setOnCountUpdate?.(fn); },
+    reinitFirms(apiKey, evs) {
       controllers.firms?.destroy?.();
-      controllers.firms = initFirmsTracker(map, apiKey, eonetWildfires);
+      controllers.firms = initFirmsTracker(map, apiKey, evs);
     },
-    destroy() {
-      Object.values(controllers).forEach(c => c?.destroy?.());
-    }
+    destroy() { Object.values(controllers).forEach(c => c?.destroy?.()); }
   };
 }

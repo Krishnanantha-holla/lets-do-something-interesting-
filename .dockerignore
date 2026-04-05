@@ -1,5 +1,9 @@
 node_modules
 dist
 .git
-.env
+.gitignore
+.env*
 .DS_Store
+*.log
+README.md
+old-index.html

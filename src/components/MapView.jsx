@@ -32,7 +32,7 @@ class MomentumTracker {
 }
 
 const MapView = forwardRef(function MapView(
-  { mapStyle, geojsonData, searchPin, theme, is3D, onEventClick, measureA, measureB },
+  { mapStyle, geojsonData, searchPin, theme, is3D, onEventClick, onBareClick, onDoubleTap, measureA, measureB },
   ref
 ) {
   const mapRef = useRef(null);
@@ -48,6 +48,7 @@ const MapView = forwardRef(function MapView(
     getFirmsCount:        () => overlayRef.current?.getFirmsCount(),
     setFirmsCountCallback:(fn) => overlayRef.current?.setFirmsCountCallback(fn),
     reinitFirms:          (key, evs) => overlayRef.current?.reinitFirms(key, evs),
+    getRawMap:            () => mapRef.current?.getMap?.() ?? null,
   }));
 
   const onStyleData = useCallback((e) => {
@@ -129,6 +130,26 @@ const MapView = forwardRef(function MapView(
     canvas.addEventListener('pointermove', onPointerMove);
     canvas.addEventListener('pointerup',   onPointerUp);
     canvas.addEventListener('pointercancel', onPointerUp);
+
+    // ── Double-tap / double-click → geo info panel ────────────────────────
+    let lastTapTime = 0;
+    let lastTapX = 0, lastTapY = 0;
+    canvas.addEventListener('pointerup', (evt) => {
+      const now = performance.now();
+      const dx = Math.abs(evt.clientX - lastTapX);
+      const dy = Math.abs(evt.clientY - lastTapY);
+      if (now - lastTapTime < 350 && dx < 20 && dy < 20) {
+        // Double tap detected
+        const rect = canvas.getBoundingClientRect();
+        const lngLat = map.unproject([evt.clientX - rect.left, evt.clientY - rect.top]);
+        onDoubleTap?.(lngLat.lat, lngLat.lng);
+        lastTapTime = 0;
+      } else {
+        lastTapTime = now;
+        lastTapX = evt.clientX;
+        lastTapY = evt.clientY;
+      }
+    });
 
     // ── 4. Wheel handler: pinch = zoom, two-finger scroll = pan ──────────
     //    Uses exponential zoom curve for Apple-quality pinch feel.
@@ -267,13 +288,15 @@ const MapView = forwardRef(function MapView(
   }, []);
 
   const handleClick = useCallback((e) => {
-    if (!e.features?.length) return;
+    if (!e.features?.length) {
+      // Bare map click — no marker hit
+      onBareClick?.(e.lngLat.lat, e.lngLat.lng);
+      return;
+    }
     const f = e.features[0];
-    // Cluster click → zoom in
     if (f.properties?.cluster_id) {
       const map = mapRef.current;
       if (!map) return;
-      // get the raw maplibre source to call getClusterExpansionZoom
       const src = map._mapRef?.current?.getSource?.('events') || null;
       if (src?.getClusterExpansionZoom) {
         src.getClusterExpansionZoom(f.properties.cluster_id, (err, zoom) => {
@@ -285,9 +308,8 @@ const MapView = forwardRef(function MapView(
       }
       return;
     }
-    // Individual event click
     if (f.properties?.id) onEventClick(f.properties.id);
-  }, [onEventClick]);
+  }, [onEventClick, onBareClick]);
 
   // Distance line geojson
   const distanceGeojson = useMemo(() => {

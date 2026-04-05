@@ -5,9 +5,8 @@ import { useLocationData } from './hooks/useLocationData';
 import MapView from './components/MapView';
 import Sidebar from './components/Sidebar';
 import StyleMenu from './components/StyleMenu';
-import ReplayBar from './components/ReplayBar';
-import TimeMachineBar from './components/TimeMachineBar';
 import CompoundPanel from './components/CompoundPanel';
+import MapClickPanel from './components/MapClickPanel';
 import { detectCompoundEvents, initCompoundLayer } from './layers/correlationEngine';
 
 function getEarthDistance(lat1, lon1, lat2, lon2) {
@@ -22,96 +21,136 @@ function getEarthDistance(lat1, lon1, lat2, lon2) {
 
 const MAP_STYLES = {
   light: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
-  dark: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+  dark:  'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
   hybrid: {
     version: 8, projection: { type: 'globe' },
     sources: {
       esriImagery: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, attribution: 'Esri, Maxar', maxzoom: 19 },
-      esriLabels: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 19 },
-      esriRoads: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 19 },
+      esriLabels:  { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 19 },
+      esriRoads:   { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 19 },
     },
     layers: [
       { id: 'imagery', type: 'raster', source: 'esriImagery' },
-      { id: 'roads', type: 'raster', source: 'esriRoads' },
-      { id: 'labels', type: 'raster', source: 'esriLabels' },
+      { id: 'roads',   type: 'raster', source: 'esriRoads'   },
+      { id: 'labels',  type: 'raster', source: 'esriLabels'  },
     ],
   },
   satellite: {
     version: 8, projection: { type: 'globe' },
     sources: {
       esriImagery: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, attribution: 'Esri, Maxar', maxzoom: 19 },
-      esriLabels: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 19 },
+      esriLabels:  { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 19 },
     },
     layers: [
       { id: 'imagery', type: 'raster', source: 'esriImagery' },
-      { id: 'labels', type: 'raster', source: 'esriLabels', minzoom: 8 },
+      { id: 'labels',  type: 'raster', source: 'esriLabels', minzoom: 8 },
     ],
   },
 };
 
+// ── Session persistence helpers ───────────────────────────────────────────────
+// Persist UI state across refresh (but clear on tab close via sessionStorage)
+function loadSession() {
+  try { return JSON.parse(sessionStorage.getItem('atlas_session') || '{}'); } catch { return {}; }
+}
+function saveSession(patch) {
+  try {
+    const cur = loadSession();
+    sessionStorage.setItem('atlas_session', JSON.stringify({ ...cur, ...patch }));
+  } catch (_) {}
+}
+
 export default function App() {
-  const mapRef = useRef(null);
-
-  const [events, setEvents] = useState([]);
-  const [eventsLoading, setEventsLoading] = useState(true);
-  const [liveHidden, setLiveHidden] = useState(false);
-  const [selectedEventId, setSelectedEventId] = useState(null);
-  const [compoundEvents, setCompoundEvents] = useState([]);
-  const [selectedCompound, setSelectedCompound] = useState(null);
+  const mapRef          = useRef(null);
   const compoundCtrlRef = useRef(null);
-  const [searchPin, setSearchPin] = useState(null);
-  const [activeCategories, setActiveCategories] = useState([]);
-  const [measureA, setMeasureA] = useState(null);
-  const [measureB, setMeasureB] = useState(null);
+  const session         = useMemo(loadSession, []);
 
-  const [theme, setTheme] = useState(() => localStorage.getItem('eonet_theme') || 'light');
+  // ── State ─────────────────────────────────────────────────────────────────
+  const [events,           setEvents]           = useState([]);
+  const [eventsLoading,    setEventsLoading]     = useState(true);
+  const [liveHidden,       setLiveHidden]        = useState(false);
+  const [selectedEventId,  setSelectedEventId]   = useState(null);
+  const [searchPin,        setSearchPin]         = useState(null);
+  const [activeCategories, setActiveCategories]  = useState(() => session.activeCategories || []);
+  const [measureA,         setMeasureA]          = useState(null);
+  const [measureB,         setMeasureB]          = useState(null);
+  const [compoundEvents,   setCompoundEvents]    = useState([]);
+  const [selectedCompound, setSelectedCompound]  = useState(null);
+  const [activeLayers,     setActiveLayers]      = useState(() => session.activeLayers || {});
+  const [firmsCount,       setFirmsCount]        = useState(0);
+  const [mapClickInfo,     setMapClickInfo]      = useState(null);
+  const [markersVisible,   setMarkersVisible]    = useState(true);
+
+  const [theme,       setTheme]       = useState(() => localStorage.getItem('eonet_theme')     || 'light');
   const [mapStyleKey, setMapStyleKey] = useState(() => localStorage.getItem('eonet_map_style') || 'light');
-  const [is3D, setIs3D] = useState(() => localStorage.getItem('eonet_is_3d') === 'true');
+  const [is3D,        setIs3D]        = useState(() => localStorage.getItem('eonet_is_3d') === 'true');
 
   const { weatherData, wikiData, loadingWeather, loadingWiki } = useLocationData(searchPin);
 
-  // Persist prefs & apply theme class
+  // ── Persist prefs ─────────────────────────────────────────────────────────
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
-    localStorage.setItem('eonet_theme', theme);
+    localStorage.setItem('eonet_theme',     theme);
     localStorage.setItem('eonet_map_style', mapStyleKey);
-    localStorage.setItem('eonet_is_3d', String(is3D));
+    localStorage.setItem('eonet_is_3d',     String(is3D));
   }, [theme, mapStyleKey, is3D]);
 
-  // Load events
+  // Persist session state (survives refresh, clears on tab close)
+  useEffect(() => { saveSession({ activeCategories }); }, [activeCategories]);
+  useEffect(() => { saveSession({ activeLayers });     }, [activeLayers]);
+
+  // ── Load events ───────────────────────────────────────────────────────────
   useEffect(() => {
     fetchEvents()
       .then(data => {
         const sorted = [...data].sort((a, b) => a.startTime - b.startTime);
         setEvents(sorted);
         setEventsLoading(false);
-        // Run compound event detection after events load
-        const compounds = detectCompoundEvents(sorted);
-        setCompoundEvents(compounds);
+        setCompoundEvents(detectCompoundEvents(sorted));
       })
-      .catch(() => { setEventsLoading(false); });
+      .catch(() => setEventsLoading(false));
   }, []);
 
-  // Init compound layer once both map and events are ready
+  // Re-apply saved layer toggles once map is ready
   useEffect(() => {
-    if (!compoundEvents.length || !mapRef.current) return;
-    // Small delay to ensure map layers are initialized
+    if (!Object.keys(activeLayers).length) return;
+    const t = setTimeout(() => {
+      Object.entries(activeLayers).forEach(([key, on]) => {
+        if (on) mapRef.current?.toggleLayer(key, true);
+      });
+    }, 1500);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // only on mount
+
+  // ── Compound layer ────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!compoundEvents.length) return;
     const t = setTimeout(() => {
       try {
         compoundCtrlRef.current?.destroy();
-        // Access raw map via the ref chain
-        const rawMap = mapRef.current?._rawMap;
+        const rawMap = mapRef.current?.getRawMap?.();
         if (!rawMap) return;
         compoundCtrlRef.current = initCompoundLayer(rawMap, compoundEvents, setSelectedCompound);
       } catch (e) { console.warn('[compound] init failed:', e); }
-    }, 2000);
+    }, 2500);
     return () => clearTimeout(t);
   }, [compoundEvents]);
 
-  const selectedEvent = useMemo(() => events.find(e => e.id === selectedEventId), [selectedEventId, events]);
+  // ── Derived state ─────────────────────────────────────────────────────────
+  const selectedEvent = useMemo(
+    () => events.find(e => e.id === selectedEventId),
+    [selectedEventId, events]
+  );
+
+  const filteredEvents = useMemo(() => {
     let result = events;
-    if (activeCategories.length > 0) result = result.filter(e => activeCategories.includes(e.categoryId));
-    if (searchPin) result = result.filter(e => getEarthDistance(searchPin.latitude, searchPin.longitude, e.lat, e.lng) <= 1500);
+    if (activeCategories.length > 0)
+      result = result.filter(e => activeCategories.includes(e.categoryId));
+    if (searchPin)
+      result = result.filter(e =>
+        getEarthDistance(searchPin.latitude, searchPin.longitude, e.lat, e.lng) <= 1500
+      );
     return result;
   }, [events, searchPin, activeCategories]);
 
@@ -127,36 +166,40 @@ export default function App() {
     };
   }, [filteredEvents]);
 
-  const activeEventCount = useMemo(() => filteredEvents.filter(e => e.status === 'open').length, [filteredEvents]);
+  const activeEventCount = useMemo(
+    () => filteredEvents.filter(e => e.status === 'open').length,
+    [filteredEvents]
+  );
 
   const currentMapStyle = useMemo(() => {
     if (mapStyleKey === 'satellite') return MAP_STYLES.satellite;
-    if (mapStyleKey === 'hybrid') return MAP_STYLES.hybrid;
+    if (mapStyleKey === 'hybrid')    return MAP_STYLES.hybrid;
     return theme === 'dark' ? MAP_STYLES.dark : MAP_STYLES.light;
   }, [mapStyleKey, theme]);
 
+  // ── Handlers ──────────────────────────────────────────────────────────────
   const handleEventClick = useCallback((eventId) => {
     const ev = events.find(e => e.id === eventId);
     if (!ev) return;
     setSelectedEventId(ev.id);
     setSearchPin(null);
+    setMapClickInfo(null);
     mapRef.current?.flyTo({
       center: [ev.lng, ev.lat],
       zoom: Math.max(mapRef.current.getZoom(), 4),
-      padding: { left: 400 },
-      duration: 1200,
+      padding: { left: 400 }, duration: 1200,
     });
   }, [events]);
+
   const handleFlyTo = useCallback((pin) => {
     mapRef.current?.flyTo({
       center: [pin.longitude, pin.latitude],
-      zoom: 16,
-      padding: { left: 400 },
-      duration: 2500,
+      zoom: 16, padding: { left: 400 }, duration: 2500,
       easing: t => t * (2 - t),
     });
     setSearchPin(pin);
     setSelectedEventId(null);
+    setMapClickInfo(null);
   }, []);
 
   const handleBack = useCallback(() => {
@@ -165,24 +208,26 @@ export default function App() {
   }, []);
 
   const handleMeasure = useCallback((a, b) => {
-    setMeasureA(a);
-    setMeasureB(b);
-    // Fit map to show both points
+    setMeasureA(a); setMeasureB(b);
     if (mapRef.current) {
-      const minLng = Math.min(a.longitude, b.longitude);
-      const maxLng = Math.max(a.longitude, b.longitude);
-      const minLat = Math.min(a.latitude, b.latitude);
-      const maxLat = Math.max(a.latitude, b.latitude);
       mapRef.current.fitBounds(
-        [[minLng, minLat], [maxLng, maxLat]],
+        [[Math.min(a.longitude, b.longitude), Math.min(a.latitude, b.latitude)],
+         [Math.max(a.longitude, b.longitude), Math.max(a.latitude, b.latitude)]],
         { padding: { left: 420, top: 80, right: 80, bottom: 80 }, duration: 1800 }
       );
     }
   }, []);
 
-  const handleMeasureClear = useCallback(() => {
-    setMeasureA(null);
-    setMeasureB(null);
+  const handleMeasureClear = useCallback(() => { setMeasureA(null); setMeasureB(null); }, []);
+
+  const handleToggleLayer = useCallback((key) => {
+    setActiveLayers(prev => {
+      const next = !prev[key];
+      mapRef.current?.toggleLayer(key, next);
+      if (key === 'firms' && next)
+        setTimeout(() => mapRef.current?.setFirmsCountCallback(setFirmsCount), 500);
+      return { ...prev, [key]: next };
+    });
   }, []);
 
   const handleToggle3D = useCallback(() => {
@@ -209,6 +254,13 @@ export default function App() {
     }
   }, [searchPin, selectedEvent, wikiData]);
 
+  // Map bare click (not on a marker) → show geo info panel
+  const handleMapBareClick = useCallback((lat, lng) => {
+    setMapClickInfo({ lat, lng });
+    setSelectedEventId(null);
+    setSearchPin(null);
+  }, []);
+
   return (
     <div className="map-wrapper">
       <div className="copy-toast" id="copy-toast">📋 Copied to clipboard</div>
@@ -217,11 +269,13 @@ export default function App() {
       <MapView
         ref={mapRef}
         mapStyle={currentMapStyle}
-        geojsonData={liveHidden ? null : geojsonData}
+        geojsonData={liveHidden || !markersVisible ? null : geojsonData}
         searchPin={searchPin}
         theme={theme}
         is3D={is3D}
         onEventClick={handleEventClick}
+        onBareClick={handleMapBareClick}
+        onDoubleTap={handleMapBareClick}
         measureA={measureA}
         measureB={measureB}
       />
@@ -234,7 +288,11 @@ export default function App() {
         loadingWiki={loadingWiki}
         loadingWeather={loadingWeather}
         activeCategories={activeCategories}
-        onToggleCategory={catId => setActiveCategories(prev => prev.includes(catId) ? prev.filter(c => c !== catId) : [...prev, catId])}
+        onToggleCategory={catId =>
+          setActiveCategories(prev =>
+            prev.includes(catId) ? prev.filter(c => c !== catId) : [...prev, catId]
+          )
+        }
         activeEventCount={activeEventCount}
         events={filteredEvents}
         eventsLoading={eventsLoading}
@@ -244,6 +302,15 @@ export default function App() {
         onShare={handleShare}
         onMeasure={handleMeasure}
         onMeasureClear={handleMeasureClear}
+        compoundCount={compoundEvents.length}
+        markersVisible={markersVisible}
+        onToggleMarkers={() => setMarkersVisible(v => !v)}
+        activeLayers={activeLayers}
+        onToggleLayer={handleToggleLayer}
+        firmsCount={firmsCount}
+        mapRef={mapRef}
+        onHideLive={() => setLiveHidden(true)}
+        onShowLive={() => setLiveHidden(false)}
       />
 
       <StyleMenu
@@ -253,22 +320,23 @@ export default function App() {
         onToggle3D={handleToggle3D}
         theme={theme}
         onToggleTheme={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
-        mapRef={mapRef}
       />
 
-      {/* Feature 1: Replay animator */}
-      <ReplayBar
-        mapRef={mapRef}
-        onHideLive={() => setLiveHidden(true)}
-        onShowLive={() => setLiveHidden(false)}
-      />
+      {/* Map click geo info panel */}
+      {mapClickInfo && (
+        <MapClickPanel
+          lat={mapClickInfo.lat}
+          lng={mapClickInfo.lng}
+          onClose={() => setMapClickInfo(null)}
+        />
+      )}
 
-      {/* Feature 4: Time Machine */}
-      <TimeMachineBar
-        mapRef={mapRef}
-        onHideLive={() => setLiveHidden(true)}
-        onShowLive={() => setLiveHidden(false)}
-      />
+      {selectedCompound && (
+        <CompoundPanel
+          compound={selectedCompound}
+          onClose={() => setSelectedCompound(null)}
+        />
+      )}
     </div>
   );
 }
