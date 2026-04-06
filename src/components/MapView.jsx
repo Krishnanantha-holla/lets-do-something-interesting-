@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useImperativeHandle, forwardRef, useMemo } from 'react';
+import React, { useRef, useCallback, useImperativeHandle, forwardRef, useMemo, useEffect } from 'react';
 import Map, { Source, Layer, NavigationControl, Marker, FullscreenControl, ScaleControl } from 'react-map-gl/maplibre';
 import { MapPin } from 'lucide-react';
 import { initOverlayLayers } from '../layers/overlayLayers';
@@ -35,8 +35,9 @@ const MapView = forwardRef(function MapView(
   { mapStyle, geojsonData, searchPin, theme, is3D, onEventClick, onBareClick, onDoubleTap, measureA, measureB, onMapLoaded, starfieldRef },
   ref
 ) {
-  const mapRef = useRef(null);
-  const overlayRef = useRef(null);
+  const mapRef       = useRef(null);
+  const overlayRef   = useRef(null);
+  const containerRef = useRef(null); // ref to the map-container div for scoped touch handling
 
   useImperativeHandle(ref, () => ({
     flyTo:       (opts) => mapRef.current?.flyTo(opts),
@@ -46,6 +47,19 @@ const MapView = forwardRef(function MapView(
     toggleLayer: (name, visible) => overlayRef.current?.toggle(name, visible),
     getRawMap:   () => mapRef.current?.getMap?.() ?? null,
   }));
+
+  // ── Non-passive touchmove: block overscroll/pull-to-refresh while allowing pinch-zoom ──
+  // Scoped to the map container so sidebar/panel scrolling is unaffected.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const onTouchMove = (e) => {
+      if (e.touches.length > 1) return; // preserve native pinch-zoom
+      e.preventDefault();               // stop pull-to-refresh / rubber-band bounce
+    };
+    container.addEventListener('touchmove', onTouchMove, { passive: false });
+    return () => container.removeEventListener('touchmove', onTouchMove);
+  }, []);
 
   const onStyleData = useCallback((e) => {
     const map = e.target;
@@ -348,7 +362,7 @@ const MapView = forwardRef(function MapView(
   }, [measureA, measureB]);
 
   return (
-    <div className="map-container">
+    <div className="map-container" ref={containerRef}>
       <Map
         ref={mapRef}
         initialViewState={{ longitude: 0, latitude: 20, zoom: 1.5, pitch: is3D ? 55 : 0, bearing: 0 }}
