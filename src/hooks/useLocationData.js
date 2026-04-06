@@ -30,6 +30,7 @@ export function useLocationData(searchPin) {
             temp: data.current.temperature_2m,
             humidity: data.current.relative_humidity_2m,
             wind: data.current.wind_speed_10m,
+            code: data.current.weather_code ?? 0,
             max: data.daily?.temperature_2m_max[0] ?? '--',
             min: data.daily?.temperature_2m_min[0] ?? '--',
           });
