@@ -69,6 +69,32 @@ const MapView = forwardRef(function MapView(
     fitBounds:   (bounds, opts) => mapRef.current?.fitBounds(bounds, opts),
     toggleLayer: (name, visible) => overlayRef.current?.toggle(name, visible),
     getRawMap:   () => mapRef.current?.getMap?.() ?? null,
+    // Bug 1: drop a red teardrop search pin, removing any previous one first
+    dropSearchPin(lng, lat) {
+      const rawMap = mapRef.current?.getMap?.();
+      if (!rawMap) return;
+      // Remove existing pin
+      if (this._searchMarker) { this._searchMarker.remove(); this._searchMarker = null; }
+      // Create teardrop element
+      const el = document.createElement('div');
+      el.style.cssText = [
+        'width:22px', 'height:22px', 'border-radius:50% 50% 50% 0',
+        'transform:rotate(-45deg)', 'background:#ef4444',
+        'border:3px solid #ffffff',
+        'box-shadow:0 2px 8px rgba(0,0,0,0.6)',
+        'cursor:pointer',
+      ].join(';');
+      const maplibre = window.maplibregl;
+      if (!maplibre) return;
+      const marker = new maplibre.Marker({ element: el, anchor: 'bottom' })
+        .setLngLat([lng, lat])
+        .addTo(rawMap);
+      this._searchMarker = marker;
+    },
+    clearSearchPin() {
+      if (this._searchMarker) { this._searchMarker.remove(); this._searchMarker = null; }
+    },
+    _searchMarker: null,
   }));
 
   const onStyleData = useCallback((e) => {

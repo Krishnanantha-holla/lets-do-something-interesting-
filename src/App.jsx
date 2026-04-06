@@ -82,7 +82,9 @@ export default function App() {
   const [mapClickInfo,     setMapClickInfo]      = useState(null);
   const [markersVisible,   setMarkersVisible]    = useState(true);
   const [sidebarOpen,      setSidebarOpen]       = useState(false);
-  const [routeGeometry,    setRouteGeometry]     = useState(null); // FIX 6: OSRM route
+  const [routeGeometry,    setRouteGeometry]     = useState(null);
+  // Bug 1 & 2: track the raw geocoder result for the inline card + pin
+  const [searchResult,     setSearchResult]      = useState(null);
 
   // ── Fix 3: Dynamic map padding based on actual UI geometry ──────────────
   useEffect(() => {
@@ -213,33 +215,23 @@ export default function App() {
     const map = mapRef.current;
     if (!map) return;
 
-    // Fly to a high altitude first, then descend once tiles are loaded
+    // Bug 1: clear any existing search pin before flying
+    map.clearSearchPin?.();
+
     map.flyTo({
       center: [pin.longitude, pin.latitude],
-      zoom: 14,           // slightly lower zoom — tiles load faster
-      pitch: 0,           // flatten during flight to reduce tile demand
-      padding: { left: 400 },
-      duration: 2200,
-      easing: t => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t, // ease-in-out
+      zoom: 13,
+      duration: 1200,
+      easing: t => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t,
     });
 
-    // Once the camera stops moving, wait for the map to go idle (tiles painted)
-    // then ease to the final view state
-    const onMoveEnd = () => {
-      map.off('moveend', onMoveEnd);
-      const waitForIdle = () => {
-        if (map.isStyleLoaded() && map.areTilesLoaded()) {
-          map.easeTo({ zoom: 16, pitch: 45, duration: 800, easing: t => 1 - Math.pow(1 - t, 3) });
-        } else {
-          map.once('idle', () => {
-            map.easeTo({ zoom: 16, pitch: 45, duration: 800, easing: t => 1 - Math.pow(1 - t, 3) });
-          });
-        }
-      };
-      waitForIdle();
-    };
-    map.once('moveend', onMoveEnd);
+    // Bug 1: drop pin after flight completes
+    map.once('moveend', () => {
+      map.dropSearchPin?.(pin.longitude, pin.latitude);
+    });
 
+    // Bug 2: store raw result for the inline card
+    setSearchResult(pin);
     setSearchPin(pin);
     setSelectedEventId(null);
     setMapClickInfo(null);
@@ -248,6 +240,14 @@ export default function App() {
   const handleBack = useCallback(() => {
     setSearchPin(null);
     setSelectedEventId(null);
+    setSearchResult(null);
+    mapRef.current?.clearSearchPin?.();
+  }, []);
+
+  const handleClearSearch = useCallback(() => {
+    setSearchPin(null);
+    setSearchResult(null);
+    mapRef.current?.clearSearchPin?.();
   }, []);
 
   const handleMeasure = useCallback((a, b, routeGeometry) => {
@@ -303,6 +303,8 @@ export default function App() {
     setMapClickInfo({ lat, lng });
     setSelectedEventId(null);
     setSearchPin(null);
+    setSearchResult(null);
+    mapRef.current?.clearSearchPin?.();
   }, []);
 
   return (
@@ -369,6 +371,8 @@ export default function App() {
         onFlyTo={handleFlyTo}
         onBack={handleBack}
         onShare={handleShare}
+        searchResult={searchResult}
+        onClearSearch={handleClearSearch}
         onMeasure={handleMeasure}
         onMeasureClear={handleMeasureClear}
         compoundCount={compoundEvents.length}

@@ -211,6 +211,7 @@ export default function Sidebar({
   activeLayers, onToggleLayer,
   markersVisible, onToggleMarkers,
   mobileOpen, onMobileClose,
+  searchResult, onClearSearch,   // Bug 1 & 2
 }) {
   const [tab,            setTab]            = useState('explore');
   const [measurePrefill, setMeasurePrefill] = useState(null);
@@ -279,7 +280,13 @@ export default function Sidebar({
   const flyToLocation = useCallback((loc) => {
     const lon = parseFloat(loc.lon), lat = parseFloat(loc.lat);
     const name = loc._isCoord ? `${lat}, ${lon}` : loc.display_name.split(',')[0];
-    onFlyTo({ longitude: lon, latitude: lat, name, full_name: loc.display_name });
+    // Pass full_name and raw display_name so App can build the result card
+    onFlyTo({
+      longitude: lon, latitude: lat,
+      name,
+      full_name: loc.display_name,
+      _raw: loc,          // Bug 2: keep raw geocoder result for the card
+    });
     setSearchQuery(''); setGeocoderResults([]);
   }, [onFlyTo]);
 
@@ -336,7 +343,10 @@ export default function Sidebar({
                 onKeyDown={handleKeyDown}
               />
               {searchQuery && (
-                <button className="search-clear" onClick={() => { setSearchQuery(''); setGeocoderResults([]); }}>
+                <button className="search-clear" onClick={() => {
+                  setSearchQuery(''); setGeocoderResults([]);
+                  onClearSearch?.(); // Bug 1 & 2: also clear pin and card
+                }}>
                   <X size={14} />
                 </button>
               )}
@@ -351,6 +361,65 @@ export default function Sidebar({
                       : loc.display_name}
                   </button>
                 ))}
+              </div>
+            )}
+
+            {/* Bug 2: inline search result card */}
+            {searchResult && !searchQuery && (
+              <div style={{
+                background: 'rgba(255,255,255,0.05)',
+                border: '0.5px solid rgba(255,255,255,0.12)',
+                borderRadius: 10,
+                padding: '12px 14px',
+                position: 'relative',
+              }}>
+                {/* Clear button */}
+                <button
+                  onClick={onClearSearch}
+                  style={{
+                    position: 'absolute', top: 8, right: 8,
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'rgba(255,255,255,0.4)', padding: 2, lineHeight: 1,
+                    fontSize: 14,
+                  }}
+                  aria-label="Clear search"
+                >
+                  <X size={13} />
+                </button>
+
+                {/* Name */}
+                <div style={{
+                  fontSize: 14, fontWeight: 500,
+                  color: 'var(--text)',
+                  paddingRight: 20,
+                  marginBottom: 4,
+                  lineHeight: 1.3,
+                }}>
+                  {searchResult.name}
+                </div>
+
+                {/* Full address */}
+                {searchResult.full_name && searchResult.full_name !== searchResult.name && (
+                  <div style={{
+                    fontSize: 12,
+                    color: 'rgba(255,255,255,0.55)',
+                    marginBottom: 4,
+                    lineHeight: 1.4,
+                  }}>
+                    {searchResult.full_name}
+                  </div>
+                )}
+
+                {/* Coordinates */}
+                <div style={{
+                  fontSize: 11,
+                  fontFamily: 'monospace',
+                  color: 'rgba(255,255,255,0.35)',
+                  letterSpacing: '0.3px',
+                }}>
+                  {Math.abs(searchResult.latitude).toFixed(4)}°{searchResult.latitude >= 0 ? 'N' : 'S'},&nbsp;
+                  {Math.abs(searchResult.longitude).toFixed(4)}°{searchResult.longitude >= 0 ? 'E' : 'W'}
+                </div>
               </div>
             )}
 
