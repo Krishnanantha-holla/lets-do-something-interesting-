@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useImperativeHandle, forwardRef, useMemo } from 'react';
+import React, { useRef, useCallback, useImperativeHandle, forwardRef, useMemo, useEffect } from 'react';
 import Map, { Source, Layer, NavigationControl, Marker, FullscreenControl, ScaleControl } from 'react-map-gl/maplibre';
 import { MapPin } from 'lucide-react';
 import { initOverlayLayers } from '../layers/overlayLayers';
@@ -37,6 +37,23 @@ const MapView = forwardRef(function MapView(
 ) {
   const mapRef = useRef(null);
   const overlayRef = useRef(null);
+  const containerRef = useRef(null);
+
+  // ── Rubber-band / overscroll prevention ────────────────────────────────────
+  // Non-passive touchmove listener: calls preventDefault for single-touch events
+  // so the browser never triggers pull-to-refresh or page bounce on iOS/Android.
+  // Multi-touch events (e.touches.length > 1) are intentionally passed through
+  // so MapLibre's native pinch-to-zoom handler continues to work.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const preventBounce = (e) => {
+      if (e.touches.length > 1) return; // allow pinch gestures
+      e.preventDefault();
+    };
+    el.addEventListener('touchmove', preventBounce, { passive: false });
+    return () => el.removeEventListener('touchmove', preventBounce);
+  }, []);
 
   useImperativeHandle(ref, () => ({
     flyTo:       (opts) => mapRef.current?.flyTo(opts),
@@ -348,7 +365,7 @@ const MapView = forwardRef(function MapView(
   }, [measureA, measureB]);
 
   return (
-    <div className="map-container">
+    <div className="map-container" ref={containerRef}>
       <Map
         ref={mapRef}
         initialViewState={{ longitude: 0, latitude: 20, zoom: 1.5, pitch: is3D ? 55 : 0, bearing: 0 }}

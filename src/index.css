@@ -52,6 +52,14 @@ html, body {
   -webkit-overflow-scrolling: auto; /* disable momentum scroll on iOS */
 }
 
+/* Ensure root div also blocks rubber-banding and fills the viewport */
+#root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  position: fixed;
+}
+
 /* True Apple-style Space Starfield Background */
 .map-wrapper {
   width: 100vw;
@@ -1048,6 +1056,20 @@ html, body {
   font-family: var(--font-family);
 }
 .section-accordion-btn:hover .section-label { color: var(--text); }
+
+/* ══════════════════════════════════════════════════════════════
+   INTERMEDIATE SCREEN (769px – 960px): prevent StyleMenu overlap
+   ══════════════════════════════════════════════════════════════ */
+
+/* On narrower desktop/tablet-landscape screens, constrain the style-controls
+   dropdown so it never renders over the left sidebar (380px wide).         */
+@media (min-width: 769px) and (max-width: 960px) {
+  .style-controls {
+    /* Limit the dropdown width on tight screens */
+    max-width: calc(100vw - 420px) !important;
+    min-width: 180px !important;
+  }
+}
 
 /* ══════════════════════════════════════════════════════════════
    MOBILE RESPONSIVENESS  (≤ 768px)

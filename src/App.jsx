@@ -31,9 +31,9 @@ const MAP_STYLES = {
       esriRoads:   { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 19 },
     },
     layers: [
-      { id: 'imagery', type: 'raster', source: 'esriImagery' },
-      { id: 'roads',   type: 'raster', source: 'esriRoads'   },
-      { id: 'labels',  type: 'raster', source: 'esriLabels'  },
+      { id: 'imagery', type: 'raster', source: 'esriImagery', paint: { 'raster-fade-duration': 0 } },
+      { id: 'roads',   type: 'raster', source: 'esriRoads',   paint: { 'raster-fade-duration': 0 } },
+      { id: 'labels',  type: 'raster', source: 'esriLabels',  paint: { 'raster-fade-duration': 0 } },
     ],
   },
   satellite: {
@@ -43,8 +43,8 @@ const MAP_STYLES = {
       esriLabels:  { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 19 },
     },
     layers: [
-      { id: 'imagery', type: 'raster', source: 'esriImagery' },
-      { id: 'labels',  type: 'raster', source: 'esriLabels', minzoom: 8 },
+      { id: 'imagery', type: 'raster', source: 'esriImagery', paint: { 'raster-fade-duration': 0 } },
+      { id: 'labels',  type: 'raster', source: 'esriLabels',  paint: { 'raster-fade-duration': 0 }, minzoom: 8 },
     ],
   },
 };
@@ -65,6 +65,7 @@ export default function App() {
   const mapRef          = useRef(null);
   const compoundCtrlRef = useRef(null);
   const starfieldRef    = useRef(null);   // ref to the oversized starfield div
+  const sidebarOpenRef  = useRef(false);  // always-current mirror of sidebarOpen for resize handler
   const session         = useMemo(loadSession, []);
 
   // ── State ─────────────────────────────────────────────────────────────────
@@ -83,17 +84,51 @@ export default function App() {
   const [markersVisible,   setMarkersVisible]    = useState(true);
   const [sidebarOpen,      setSidebarOpen]       = useState(false);
 
-  // Adjust map padding when mobile sidebar opens/closes
-  useEffect(() => {
+  // ── Dynamic map padding ───────────────────────────────────────────────────
+  // Calculates and applies MapLibre padding so the globe always rotates in the
+  // visible, unobstructed area — accounting for the sidebar on desktop, the
+  // floating sidebar overlay on mobile, and bottom overlays.
+  const applyMapPadding = useCallback((open) => {
+    const map = mapRef.current;
+    if (!map) return;
     const isMobile = window.innerWidth <= 768;
-    if (!isMobile) return;
-    mapRef.current?.easeTo({
-      padding: sidebarOpen
-        ? { left: Math.min(340, window.innerWidth * 0.88) }
-        : { left: 0 },
-      duration: 280,
-    });
-  }, [sidebarOpen]);
+
+    if (isMobile) {
+      // On mobile the map is full-screen; only apply left padding when the
+      // floating sidebar is open so the globe re-centres in the visible area.
+      const sidebarW = open ? Math.min(340, window.innerWidth * 0.88) : 0;
+      // Keep a small top buffer for the hamburger button (40px + 16px margin).
+      const topPad   = 60;
+      // Keep bottom buffer so MapLibre controls don't sit under any overlay.
+      const bottomPad = 100;
+      map.easeTo({ padding: { left: sidebarW, top: topPad, right: 0, bottom: bottomPad }, duration: 280 });
+    } else {
+      // On desktop the map container already starts at left:380px (via CSS),
+      // so no additional padding is needed for the sidebar.
+      map.easeTo({ padding: { left: 0, top: 0, right: 0, bottom: 0 }, duration: 200 });
+    }
+  }, []); // no state dependencies — `open` is always passed explicitly
+
+  // Keep the ref in sync so the resize handler never captures a stale value.
+  useEffect(() => { sidebarOpenRef.current = sidebarOpen; }, [sidebarOpen]);
+
+  // Re-apply padding when sidebar open/close state changes
+  useEffect(() => {
+    applyMapPadding(sidebarOpen);
+  }, [sidebarOpen, applyMapPadding]);
+
+  // Re-apply padding on orientation change and window resize so the globe
+  // stays centred in the visible area after device rotation or browser resize.
+  // Uses the ref to read the current sidebar state without a stale closure.
+  useEffect(() => {
+    const onResize = () => applyMapPadding(sidebarOpenRef.current);
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize);
+    };
+  }, [applyMapPadding]);
 
   const [theme,       setTheme]       = useState(() => localStorage.getItem('eonet_theme')     || 'light');
   const [mapStyleKey, setMapStyleKey] = useState(() => localStorage.getItem('eonet_map_style') || 'hybrid');
