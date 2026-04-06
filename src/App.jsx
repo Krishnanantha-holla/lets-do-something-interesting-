@@ -98,7 +98,7 @@ export default function App() {
     });
   }, [sidebarOpen]);
 
-  const [theme,       setTheme]       = useState(() => localStorage.getItem('eonet_theme')     || 'light');
+  const [theme,       setTheme]       = useState(() => localStorage.getItem('eonet_theme') || 'dark');
   const [mapStyleKey, setMapStyleKey] = useState(() => localStorage.getItem('eonet_map_style') || 'hybrid');
   const [is3D,        setIs3D]        = useState(() => localStorage.getItem('eonet_is_3d') === 'true');
 

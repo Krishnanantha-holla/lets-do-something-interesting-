@@ -10,6 +10,13 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@500;700;800&display=swap" rel="stylesheet" />
   </head>
   <body>
+    <!-- Apply theme before React hydrates to prevent flash -->
+    <script>
+      (function() {
+        var t = localStorage.getItem('eonet_theme') || 'dark';
+        if (t === 'dark') document.documentElement.classList.add('dark');
+      })();
+    </script>
     <div id="root"></div>
     <script src="https://cdn.jsdelivr.net/npm/suncalc@1.9.0/suncalc.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
