@@ -1366,25 +1366,30 @@ html, body {
   border-radius: 4px;
 }
 
-/* ── Globe area skeleton ── */
+/* ── Globe area skeleton — matches .map-container exactly ── */
 .skeleton-globe-area {
-  flex: 1;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  position: absolute;
+  top: 0;
+  left: 380px;   /* same as .map-container */
+  right: 0;
+  bottom: 0;
+  /* no flex centering — the globe fills the whole area */
+  overflow: hidden;
 }
 .skel-globe {
-  width: min(70vw, 70vh);
-  height: min(70vw, 70vh);
-  border-radius: 50%;
+  /* Fill the entire map area, just like the real globe canvas */
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 0;   /* no circle — the real globe is full-bleed */
   background: radial-gradient(
-    circle at 38% 35%,
-    rgba(255,255,255,0.10) 0%,
-    rgba(255,255,255,0.04) 50%,
-    rgba(255,255,255,0.02) 100%
+    ellipse 80% 80% at 55% 48%,
+    rgba(30, 60, 120, 0.35) 0%,
+    rgba(10, 20, 50, 0.18) 55%,
+    rgba(3, 4, 8, 0.0) 100%
   );
-  border: 1px solid rgba(255,255,255,0.08);
+  border: none;
   animation: skeletonPulse 2s ease-in-out infinite;
 }
 .skel-style-btn {
@@ -1405,7 +1410,7 @@ html, body {
   border-radius: 8px;
 }
 
-/* ── Loading label ── */
+/* ── Loading label — centered inside .skeleton-globe-area ── */
 .skeleton-label {
   position: absolute;
   bottom: 32px;
@@ -1420,6 +1425,7 @@ html, body {
   letter-spacing: 0.5px;
   font-family: var(--font-family);
   white-space: nowrap;
+  z-index: 1;
 }
 .skeleton-spinner {
   width: 16px; height: 16px;
@@ -1433,9 +1439,9 @@ html, body {
 /* ── Mobile skeleton adjustments ── */
 @media (max-width: 768px) {
   .skeleton-sidebar { display: none; }
-  .skel-globe {
-    width: min(85vw, 85vh);
-    height: min(85vw, 85vh);
+  /* On mobile the map is full-screen, so globe area matches */
+  .skeleton-globe-area {
+    left: 0;
   }
 }
 
