@@ -41,43 +41,34 @@ html, body {
   color: var(--text);
   font-family: var(--font-family);
   -webkit-font-smoothing: antialiased;
-
-  /* ── App-like viewport lock — kills ALL browser rubber-banding ── */
-  overflow: hidden;
-  position: fixed;            /* locks the viewport on iOS Safari */
+  /* FIX 1: minimal overscroll — no position:fixed, no overflow:hidden on body */
   overscroll-behavior: none;
-  overscroll-behavior-x: none;
-  overscroll-behavior-y: none;
-  touch-action: pan-x pan-y;
-  -webkit-overflow-scrolling: auto;
 }
 
-/* Fix 2: #root must also be locked — prevents any child from scrolling the doc */
+/* FIX 1: #root just fills the viewport, no fixed/overflow tricks */
 #root {
   width: 100%;
   height: 100%;
-  overflow: hidden;
-  position: fixed;
-  top: 0; left: 0;
 }
 
-/* True Apple-style Space Starfield Background */
+/* FIX 2: map-wrapper is the positioning context */
 .map-wrapper {
   width: 100vw;
   height: 100vh;
   height: 100dvh;
   position: relative;
   overflow: hidden;
-  overscroll-behavior: none;
 }
+/* FIX 2: map fills entire right panel edge-to-edge, zero margins */
 .map-container {
-  position: fixed;
+  position: absolute;
   top: 0; left: 380px; right: 0; bottom: 0;
   width: calc(100vw - 380px);
-  height: 100vh;
-  height: 100dvh;
-  z-index: 0;                 /* Fix 2: map is z-index 0, UI floats above */
+  height: 100%;
+  margin: 0; padding: 0;
+  z-index: 0;
   background-color: transparent;
+  /* FIX 1: map owns all touch, no browser interference */
   touch-action: none;
   overscroll-behavior: none;
 }
@@ -330,6 +321,9 @@ html, body {
   box-shadow: 4px 0 40px rgba(0,0,0,0.18);
   border-right: 1px solid var(--panel-border);
   transition: background var(--ease);
+  /* FIX 1: sidebar scrolls independently */
+  touch-action: pan-y;
+  overscroll-behavior: contain;
 }
 .sidebar-header {
   padding: 20px 18px 14px;

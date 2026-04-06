@@ -32,17 +32,15 @@ class MomentumTracker {
 }
 
 const MapView = forwardRef(function MapView(
-  { mapStyle, geojsonData, searchPin, theme, is3D, onEventClick, onBareClick, onDoubleTap, measureA, measureB, onMapLoaded, starfieldRef },
+  { mapStyle, geojsonData, searchPin, theme, is3D, onEventClick, onBareClick, onDoubleTap, measureA, measureB, routeGeometry, onMapLoaded, starfieldRef },
   ref
 ) {
   const mapRef = useRef(null);
   const overlayRef = useRef(null);
   const containerRef = useRef(null);
 
-  // ── Fix 1: Non-passive touchmove on the container ────────────────────────
-  // CSS overscroll-behavior alone doesn't stop iOS Safari bounce.
-  // A non-passive preventDefault on touchmove is the only reliable fix.
-  // We skip multi-touch (pinch) so MapLibre's native zoom still works.
+  // ── Fix 1: Non-passive touchmove on the container + canvas ─────────────
+  // Targeted preventDefault only on map area — sidebar scroll unaffected.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -51,7 +49,17 @@ const MapView = forwardRef(function MapView(
       e.preventDefault();
     };
     el.addEventListener('touchmove', handler, { passive: false });
-    return () => el.removeEventListener('touchmove', handler);
+    // Also block document-level touchmove that targets the map
+    const docHandler = (e) => {
+      if (e.target.closest('.map-container') || e.target.closest('#map')) {
+        if (e.touches.length === 1) e.preventDefault();
+      }
+    };
+    document.addEventListener('touchmove', docHandler, { passive: false });
+    return () => {
+      el.removeEventListener('touchmove', handler);
+      document.removeEventListener('touchmove', docHandler);
+    };
   }, []);
 
   useImperativeHandle(ref, () => ({
@@ -73,11 +81,15 @@ const MapView = forwardRef(function MapView(
     const canvas = map.getCanvas();
 
     // ── 1. Disable MapLibre's built-in scroll/drag so we own all gestures ──
-    // Keep touchZoomRotate and touchPitch ENABLED — MapLibre handles pinch natively.
+    // FIX 8: touchZoomRotate stays on for pinch-zoom, but rotation is disabled.
     map.scrollZoom.disable();
     map.dragPan.disable();
-    map.touchZoomRotate.enable();   // explicit: pinch-to-zoom must stay on
-    map.touchPitch.enable();        // explicit: two-finger tilt must stay on
+    map.touchZoomRotate.enable();
+    map.touchZoomRotate.disableRotation(); // FIX 8: pinch zooms only, no rotate
+    map.touchPitch.disable();              // FIX 8: no pitch on touch
+
+    // FIX 2: force canvas to fill container after load
+    map.resize();
 
     // ── 2. Momentum tracker for pan inertia ──────────────────────────────
     const momentum = new MomentumTracker();
@@ -251,15 +263,9 @@ const MapView = forwardRef(function MapView(
 
     canvas.addEventListener('wheel', onWheel, { passive: false });
 
-    // ── 5. Globe constraints — no feedback loops ─────────────────────────
-    // We clamp lat/pitch by intercepting the pan/zoom at the source,
-    // NOT inside move/pitch events (which cause re-entrant lock-ups).
-    // Instead we wrap panBy so every pan delta is clamped before it's applied.
-
+    // ── 5. Globe lat constraints ─────────────────────────────────────────
     const GLOBE_ZOOM_THRESHOLD = 3.5;
-    const MAX_LAT_GLOBE        = 78;   // degrees — poles visible, never flipped
-    const MAX_PITCH_GLOBE      = 40;
-    const MAX_PITCH_NORMAL     = 85;
+    const MAX_LAT_GLOBE        = 78;
 
     // Patch panBy to clamp latitude in globe mode
     const originalPanBy = map.panBy.bind(map);
@@ -283,14 +289,7 @@ const MapView = forwardRef(function MapView(
       return originalPanBy(offset, options);
     };
 
-    // Clamp pitch at source too — before it's applied
-    map.on('pitchstart', () => {
-      const zoom     = map.getZoom();
-      const maxPitch = zoom < GLOBE_ZOOM_THRESHOLD ? MAX_PITCH_GLOBE : MAX_PITCH_NORMAL;
-      if (map.getPitch() > maxPitch) {
-        map.easeTo({ pitch: maxPitch, duration: 100 });
-      }
-    });
+    // Clamp pitch — maxPitch:0 handles this at the MapLibre level
 
     // ── 6. Dynamic starfield — driven via ref, zero React re-renders ────────
     map.on('move', () => {
@@ -367,9 +366,10 @@ const MapView = forwardRef(function MapView(
     <div className="map-container" ref={containerRef}>
       <Map
         ref={mapRef}
-        initialViewState={{ longitude: 20, latitude: 15, zoom: 2.8, pitch: is3D ? 45 : 0, bearing: 0 }}
+        initialViewState={{ longitude: 20, latitude: 15, zoom: 2.8, pitch: 0, bearing: 0 }}
         minZoom={1} maxZoom={22}
-        maxPitch={85}
+        maxPitch={0}
+        minPitch={0}
         mapStyle={mapStyle}
         interactiveLayerIds={['events-layer', 'clusters']}
         dragPan={false}
@@ -378,7 +378,7 @@ const MapView = forwardRef(function MapView(
         keyboard={true}
         doubleClickZoom={true}
         touchZoomRotate={true}
-        touchPitch={true}
+        touchPitch={false}
         pitchWithRotate={false}
         // Fix 2: retain parent LOD tiles until children are fully painted
         fadeDuration={0}
@@ -443,23 +443,24 @@ const MapView = forwardRef(function MapView(
           </Source>
         )}
 
-        {/* Distance measurement line — draped over terrain */}
+        {/* Distance measurement line — straight */}
         {distanceGeojson && (
           <Source id="distance-line" type="geojson" data={distanceGeojson}>
             <Layer id="distance-line-casing" type="line"
               layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-              paint={{
-                'line-color': '#fff',
-                'line-width': 5,
-                'line-opacity': 0.5,
-              }} />
+              paint={{ 'line-color': '#fff', 'line-width': 5, 'line-opacity': 0.5 }} />
             <Layer id="distance-line-fill" type="line"
               layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-              paint={{
-                'line-color': '#007aff',
-                'line-width': 2.5,
-                'line-dasharray': [4, 3],
-              }} />
+              paint={{ 'line-color': '#007aff', 'line-width': 2.5, 'line-dasharray': [4, 3] }} />
+          </Source>
+        )}
+
+        {/* FIX 6: OSRM road route — amber dashed line */}
+        {routeGeometry && (
+          <Source id="route-line" type="geojson" data={{ type: 'Feature', geometry: routeGeometry, properties: {} }}>
+            <Layer id="route-line-layer" type="line"
+              layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+              paint={{ 'line-color': '#f59e0b', 'line-width': 2, 'line-dasharray': [4, 2], 'line-opacity': 0.9 }} />
           </Source>
         )}
         {measureA && (

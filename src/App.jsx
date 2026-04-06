@@ -82,6 +82,7 @@ export default function App() {
   const [mapClickInfo,     setMapClickInfo]      = useState(null);
   const [markersVisible,   setMarkersVisible]    = useState(true);
   const [sidebarOpen,      setSidebarOpen]       = useState(false);
+  const [routeGeometry,    setRouteGeometry]     = useState(null); // FIX 6: OSRM route
 
   // ── Fix 3: Dynamic map padding based on actual UI geometry ──────────────
   useEffect(() => {
@@ -249,8 +250,9 @@ export default function App() {
     setSelectedEventId(null);
   }, []);
 
-  const handleMeasure = useCallback((a, b) => {
+  const handleMeasure = useCallback((a, b, routeGeometry) => {
     setMeasureA(a); setMeasureB(b);
+    if (routeGeometry) setRouteGeometry(routeGeometry);
     if (mapRef.current) {
       mapRef.current.fitBounds(
         [[Math.min(a.longitude, b.longitude), Math.min(a.latitude, b.latitude)],
@@ -260,7 +262,9 @@ export default function App() {
     }
   }, []);
 
-  const handleMeasureClear = useCallback(() => { setMeasureA(null); setMeasureB(null); }, []);
+  const handleMeasureClear = useCallback(() => {
+    setMeasureA(null); setMeasureB(null); setRouteGeometry(null);
+  }, []);
 
   const handleToggleLayer = useCallback((key) => {
     setActiveLayers(prev => {
@@ -340,6 +344,7 @@ export default function App() {
         onDoubleTap={handleMapBareClick}
         measureA={measureA}
         measureB={measureB}
+        routeGeometry={routeGeometry}
         onMapLoaded={() => setIsMapLoaded(true)}
         starfieldRef={starfieldRef}
       />

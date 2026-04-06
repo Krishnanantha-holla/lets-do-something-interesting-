@@ -110,19 +110,47 @@ export default function DistanceTool({ onMeasure, onClear, prefillA }) {
   const [pointA, setPointA] = useState(prefillA || null);
   const [pointB, setPointB] = useState(null);
   const [result, setResult] = useState(null);
+  const [roadDist, setRoadDist]   = useState(null);   // FIX 6: OSRM road distance
+  const [roadLoading, setRoadLoading] = useState(false);
+  const [roadError,   setRoadError]   = useState(false);
 
-  // Apply prefill when it changes (e.g. "Distance from here" button)
   useEffect(() => {
-    if (prefillA) { setPointA(prefillA); setResult(null); onClear(); }
+    if (prefillA) { setPointA(prefillA); setResult(null); setRoadDist(null); onClear(); }
   }, [prefillA]);
 
-  const calculate = () => {
+  const calculate = async () => {
     if (!pointA || !pointB) return;
-    setResult(haversine(pointA.latitude, pointA.longitude, pointB.latitude, pointB.longitude));
+    const straight = haversine(pointA.latitude, pointA.longitude, pointB.latitude, pointB.longitude);
+    setResult(straight);
     onMeasure(pointA, pointB);
+
+    // FIX 6: fetch OSRM road route
+    setRoadLoading(true);
+    setRoadError(false);
+    setRoadDist(null);
+    try {
+      const url = `https://router.project-osrm.org/route/v1/driving/${pointA.longitude},${pointA.latitude};${pointB.longitude},${pointB.latitude}?overview=full&geometries=geojson`;
+      const res  = await fetch(url);
+      const data = await res.json();
+      if (data.code === 'Ok' && data.routes?.[0]) {
+        setRoadDist((data.routes[0].distance / 1000).toFixed(1));
+        // Pass route geometry up so MapView can draw it
+        onMeasure(pointA, pointB, data.routes[0].geometry);
+      } else {
+        setRoadError(true);
+      }
+    } catch {
+      setRoadError(true);
+    } finally {
+      setRoadLoading(false);
+    }
   };
 
-  const reset = () => { setPointA(null); setPointB(null); setResult(null); onClear(); };
+  const reset = () => {
+    setPointA(null); setPointB(null);
+    setResult(null); setRoadDist(null); setRoadError(false);
+    onClear();
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -144,8 +172,8 @@ export default function DistanceTool({ onMeasure, onClear, prefillA }) {
       <PointInput
         label="Point A" color="#007aff"
         value={pointA}
-        onSelect={p => { setPointA(p); setResult(null); }}
-        onClear={() => { setPointA(null); setResult(null); onClear(); }}
+        onSelect={p => { setPointA(p); setResult(null); setRoadDist(null); }}
+        onClear={() => { setPointA(null); setResult(null); setRoadDist(null); onClear(); }}
       />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -158,35 +186,63 @@ export default function DistanceTool({ onMeasure, onClear, prefillA }) {
       <PointInput
         label="Point B" color="#ff3b30"
         value={pointB}
-        onSelect={p => { setPointB(p); setResult(null); }}
-        onClear={() => { setPointB(null); setResult(null); onClear(); }}
+        onSelect={p => { setPointB(p); setResult(null); setRoadDist(null); }}
+        onClear={() => { setPointB(null); setResult(null); setRoadDist(null); onClear(); }}
       />
 
-      {/* Calculate button — only when both filled and no result yet */}
+      {/* Calculate button */}
       {pointA && pointB && !result && (
         <button className="calc-btn" onClick={calculate}>
           <Ruler size={15} /> Calculate Distance
         </button>
       )}
 
-      {/* Result */}
+      {/* Result — FIX 6: shows both straight-line and road distance */}
       {result !== null && (
         <div className="distance-result">
-          <div style={{ fontSize: '0.72rem', color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 6 }}>
-            Great-circle distance
+          {/* Straight-line */}
+          <div style={{ fontSize: '0.68rem', color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4 }}>
+            As the crow flies
           </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-            <span style={{ fontSize: '2.2rem', fontWeight: 800, color: 'var(--accent)', letterSpacing: '-0.03em', lineHeight: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 10 }}>
+            <span style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--accent)', letterSpacing: '-0.03em', lineHeight: 1 }}>
               {result >= 1000 ? (result / 1000).toFixed(2) : Math.round(result)}
             </span>
-            <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--muted)' }}>
+            <span style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--muted)' }}>
               {result >= 1000 ? 'thousand km' : 'km'}
             </span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--muted)', marginLeft: 4 }}>
+              ≈ {Math.round(result * 0.621371).toLocaleString()} mi
+            </span>
           </div>
-          <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: 4 }}>
-            ≈ {Math.round(result * 0.621371).toLocaleString()} miles
+
+          {/* Road distance */}
+          <div style={{ borderTop: '1px solid var(--panel-border-inner)', paddingTop: 10 }}>
+            <div style={{ fontSize: '0.68rem', color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4 }}>
+              Via roads
+            </div>
+            {roadLoading ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--muted)', fontSize: '0.82rem' }}>
+                <span className="replay-spinner" style={{ width: 14, height: 14 }} /> Fetching route…
+              </div>
+            ) : roadDist ? (
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#f59e0b', letterSpacing: '-0.03em', lineHeight: 1 }}>
+                  {roadDist}
+                </span>
+                <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--muted)' }}>km</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--muted)', marginLeft: 4 }}>
+                  ≈ {Math.round(parseFloat(roadDist) * 0.621371).toLocaleString()} mi
+                </span>
+              </div>
+            ) : roadError ? (
+              <div style={{ fontSize: '0.78rem', color: 'var(--muted)', fontStyle: 'italic' }}>
+                Road route unavailable
+              </div>
+            ) : null}
           </div>
-          <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: 3 }}>
+
+          <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: 8 }}>
             {pointA.name} → {pointB.name}
           </div>
         </div>

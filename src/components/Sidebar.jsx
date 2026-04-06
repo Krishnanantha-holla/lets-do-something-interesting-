@@ -8,6 +8,7 @@ import {
 import { useDebounce } from '../hooks/useDebounce';
 import DetailView from './DetailView';
 import DistanceTool from './DistanceTool';
+import MobileDetailSheet from './MobileDetailSheet';
 
 const CATEGORY_ICONS = {
   wildfires: Flame, volcanoes: Mountain, severeStorms: CloudLightning,
@@ -218,10 +219,29 @@ export default function Sidebar({
   const [feedOpen,       setFeedOpen]       = useState(false);
   const [layersOpen,     setLayersOpen]     = useState(false);
   const [detailsOpen,    setDetailsOpen]    = useState(false);
-  const [eventsOpen,     setEventsOpen]     = useState(false); // events hidden by default
+  const [eventsOpen,     setEventsOpen]     = useState(false);
   const [lastUpdated]                       = useState(formatLastUpdated);
-  const drawerRef = useRef(null);
+  const drawerRef   = useRef(null);
+  const searchRef   = useRef(null);
+  // FIX 9: detect mobile
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
   const debouncedQuery = useDebounce(searchQuery, 350);
+
+  // FIX 3: close dropdown on click outside search area
+  useEffect(() => {
+    const handler = (e) => {
+      if (searchRef.current && !searchRef.current.contains(e.target)) {
+        setGeocoderResults([]);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   // Count events from today for the badge
   const todayCount = useMemo(() => {
@@ -306,7 +326,7 @@ export default function Sidebar({
               )}
             </div>
 
-            <div className="search-container">
+            <div className="search-container" ref={searchRef}>
               <Search className="search-icon" size={15} />
               <input
                 type="text" className="search-input"
@@ -349,15 +369,29 @@ export default function Sidebar({
       {/* ── Content ── */}
       <div className="sidebar-content">
         {showDetail ? (
-          <DetailView
-            searchPin={searchPin}
-            selectedEvent={selectedEvent}
-            wikiData={wikiData}
-            weatherData={weatherData}
-            loadingWiki={loadingWiki}
-            loadingWeather={loadingWeather}
-            onMeasureFromHere={handleMeasureFromHere}
-          />
+          isMobile ? (
+            <MobileDetailSheet onClose={onBack}>
+              <DetailView
+                searchPin={searchPin}
+                selectedEvent={selectedEvent}
+                wikiData={wikiData}
+                weatherData={weatherData}
+                loadingWiki={loadingWiki}
+                loadingWeather={loadingWeather}
+                onMeasureFromHere={handleMeasureFromHere}
+              />
+            </MobileDetailSheet>
+          ) : (
+            <DetailView
+              searchPin={searchPin}
+              selectedEvent={selectedEvent}
+              wikiData={wikiData}
+              weatherData={weatherData}
+              loadingWiki={loadingWiki}
+              loadingWeather={loadingWeather}
+              onMeasureFromHere={handleMeasureFromHere}
+            />
+          )
         ) : tab === 'measure' ? (
           <DistanceTool onMeasure={onMeasure} onClear={onMeasureClear} prefillA={measurePrefill} />
         ) : (
