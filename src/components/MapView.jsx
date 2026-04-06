@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useImperativeHandle, forwardRef, useMemo } from 'react';
+import React, { useRef, useCallback, useImperativeHandle, forwardRef, useMemo, useEffect } from 'react';
 import Map, { Source, Layer, NavigationControl, Marker, FullscreenControl, ScaleControl } from 'react-map-gl/maplibre';
 import { MapPin } from 'lucide-react';
 import { initOverlayLayers } from '../layers/overlayLayers';
@@ -37,6 +37,22 @@ const MapView = forwardRef(function MapView(
 ) {
   const mapRef = useRef(null);
   const overlayRef = useRef(null);
+  const containerRef = useRef(null);
+
+  // ── Fix 1: Non-passive touchmove on the container ────────────────────────
+  // CSS overscroll-behavior alone doesn't stop iOS Safari bounce.
+  // A non-passive preventDefault on touchmove is the only reliable fix.
+  // We skip multi-touch (pinch) so MapLibre's native zoom still works.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const handler = (e) => {
+      if (e.touches.length > 1) return; // let MapLibre handle pinch
+      e.preventDefault();
+    };
+    el.addEventListener('touchmove', handler, { passive: false });
+    return () => el.removeEventListener('touchmove', handler);
+  }, []);
 
   useImperativeHandle(ref, () => ({
     flyTo:       (opts) => mapRef.current?.flyTo(opts),
@@ -348,7 +364,7 @@ const MapView = forwardRef(function MapView(
   }, [measureA, measureB]);
 
   return (
-    <div className="map-container">
+    <div className="map-container" ref={containerRef}>
       <Map
         ref={mapRef}
         initialViewState={{ longitude: 0, latitude: 20, zoom: 1.5, pitch: is3D ? 55 : 0, bearing: 0 }}

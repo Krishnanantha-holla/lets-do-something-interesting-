@@ -43,13 +43,22 @@ html, body {
   -webkit-font-smoothing: antialiased;
 
   /* ── App-like viewport lock — kills ALL browser rubber-banding ── */
-  overflow: hidden;           /* no document scroll */
+  overflow: hidden;
   position: fixed;            /* locks the viewport on iOS Safari */
-  overscroll-behavior: none;  /* disables pull-to-refresh + swipe-back */
+  overscroll-behavior: none;
   overscroll-behavior-x: none;
   overscroll-behavior-y: none;
-  touch-action: pan-x pan-y;  /* allow panning but block overscroll bounce */
-  -webkit-overflow-scrolling: auto; /* disable momentum scroll on iOS */
+  touch-action: pan-x pan-y;
+  -webkit-overflow-scrolling: auto;
+}
+
+/* Fix 2: #root must also be locked — prevents any child from scrolling the doc */
+#root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: fixed;
+  top: 0; left: 0;
 }
 
 /* True Apple-style Space Starfield Background */
@@ -66,10 +75,9 @@ html, body {
   top: 0; left: 380px; right: 0; bottom: 0;
   width: calc(100vw - 380px);
   height: 100vh;
-  height: 100dvh; /* dynamic viewport height — accounts for mobile browser chrome */
-  z-index: 10;
+  height: 100dvh;
+  z-index: 0;                 /* Fix 2: map is z-index 0, UI floats above */
   background-color: transparent;
-  /* Full touch control to MapLibre — no browser gesture interference */
   touch-action: none;
   overscroll-behavior: none;
 }

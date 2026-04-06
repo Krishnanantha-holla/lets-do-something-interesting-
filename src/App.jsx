@@ -31,9 +31,9 @@ const MAP_STYLES = {
       esriRoads:   { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 19 },
     },
     layers: [
-      { id: 'imagery', type: 'raster', source: 'esriImagery' },
-      { id: 'roads',   type: 'raster', source: 'esriRoads'   },
-      { id: 'labels',  type: 'raster', source: 'esriLabels'  },
+      { id: 'imagery', type: 'raster', source: 'esriImagery', paint: { 'raster-fade-duration': 0 } },
+      { id: 'roads',   type: 'raster', source: 'esriRoads',   paint: { 'raster-fade-duration': 0 } },
+      { id: 'labels',  type: 'raster', source: 'esriLabels',  paint: { 'raster-fade-duration': 0 } },
     ],
   },
   satellite: {
@@ -43,8 +43,8 @@ const MAP_STYLES = {
       esriLabels:  { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 19 },
     },
     layers: [
-      { id: 'imagery', type: 'raster', source: 'esriImagery' },
-      { id: 'labels',  type: 'raster', source: 'esriLabels', minzoom: 8 },
+      { id: 'imagery', type: 'raster', source: 'esriImagery', paint: { 'raster-fade-duration': 0 } },
+      { id: 'labels',  type: 'raster', source: 'esriLabels',  minzoom: 8, paint: { 'raster-fade-duration': 0 } },
     ],
   },
 };
@@ -83,14 +83,17 @@ export default function App() {
   const [markersVisible,   setMarkersVisible]    = useState(true);
   const [sidebarOpen,      setSidebarOpen]       = useState(false);
 
-  // Adjust map padding when mobile sidebar opens/closes
+  // ── Fix 3: Dynamic map padding based on actual UI geometry ──────────────
   useEffect(() => {
     const isMobile = window.innerWidth <= 768;
     if (!isMobile) return;
+
+    const sidebarW = sidebarOpen ? Math.min(340, window.innerWidth * 0.88) : 0;
+    // Hamburger button is 40px + 16px top + 16px gap ≈ 72px top clearance on mobile
+    const topClearance = 72;
+
     mapRef.current?.easeTo({
-      padding: sidebarOpen
-        ? { left: Math.min(340, window.innerWidth * 0.88) }
-        : { left: 0 },
+      padding: { left: sidebarW, top: topClearance, right: 0, bottom: 0 },
       duration: 280,
     });
   }, [sidebarOpen]);

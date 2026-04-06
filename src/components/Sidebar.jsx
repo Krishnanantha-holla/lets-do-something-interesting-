@@ -217,6 +217,7 @@ export default function Sidebar({
   const [geocoderResults,setGeocoderResults]= useState([]);
   const [feedOpen,       setFeedOpen]       = useState(false);
   const [layersOpen,     setLayersOpen]     = useState(false);
+  const [detailsOpen,    setDetailsOpen]    = useState(false); // stats + layers hidden by default
   const [lastUpdated]                       = useState(formatLastUpdated);
   const drawerRef = useRef(null);
   const debouncedQuery = useDebounce(searchQuery, 350);
@@ -396,39 +397,57 @@ export default function Sidebar({
               </div>
             </div>
 
-            {/* Stats 2×2 grid */}
-            <StatsGrid
-              events={events || []}
-              activeEventCount={activeEventCount}
-              eventsLoading={eventsLoading}
-              lastUpdated={lastUpdated}
-            />
-
-            {/* ── Live Layers — collapsible ── */}
+            {/* Stats + Live Layers — collapsed by default, expand on demand */}
             <div>
               <button
                 className="section-accordion-btn"
-                onClick={() => setLayersOpen(v => !v)}
+                onClick={() => setDetailsOpen(v => !v)}
+                style={{ width: '100%' }}
               >
-                <span className="section-label" style={{ margin: 0 }}>Live Layers</span>
-                {layersOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                <span className="section-label" style={{ margin: 0 }}>Details & Layers</span>
+                {detailsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
               </button>
-              {layersOpen && (
-                <div className="toggle-list" style={{ marginTop: 8 }}>
-                  {OVERLAY_LAYERS.map(({ key, label, icon: Icon }) => (
+
+              {detailsOpen && (
+                <>
+                  {/* Stats 2×2 grid */}
+                  <div style={{ marginTop: 12 }}>
+                    <StatsGrid
+                      events={events || []}
+                      activeEventCount={activeEventCount}
+                      eventsLoading={eventsLoading}
+                      lastUpdated={lastUpdated}
+                    />
+                  </div>
+
+                  {/* Live Layers */}
+                  <div style={{ marginTop: 12 }}>
                     <button
-                      key={key}
-                      className={`toggle-btn overlay-toggle ${activeLayers?.[key] ? 'active' : ''}`}
-                      onClick={() => onToggleLayer?.(key)}
+                      className="section-accordion-btn"
+                      onClick={() => setLayersOpen(v => !v)}
                     >
-                      <Icon size={14} />
-                      <span style={{ flex: 1 }}>{label}</span>
-                      <span className={`layer-pill ${activeLayers?.[key] ? 'on' : 'off'}`}>
-                        {activeLayers?.[key] ? 'ON' : 'OFF'}
-                      </span>
+                      <span className="section-label" style={{ margin: 0 }}>Live Layers</span>
+                      {layersOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     </button>
-                  ))}
-                </div>
+                    {layersOpen && (
+                      <div className="toggle-list" style={{ marginTop: 8 }}>
+                        {OVERLAY_LAYERS.map(({ key, label, icon: Icon }) => (
+                          <button
+                            key={key}
+                            className={`toggle-btn overlay-toggle ${activeLayers?.[key] ? 'active' : ''}`}
+                            onClick={() => onToggleLayer?.(key)}
+                          >
+                            <Icon size={14} />
+                            <span style={{ flex: 1 }}>{label}</span>
+                            <span className={`layer-pill ${activeLayers?.[key] ? 'on' : 'off'}`}>
+                              {activeLayers?.[key] ? 'ON' : 'OFF'}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
             </div>
           </>
