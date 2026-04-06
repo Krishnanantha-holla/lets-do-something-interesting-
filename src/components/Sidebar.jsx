@@ -217,7 +217,8 @@ export default function Sidebar({
   const [geocoderResults,setGeocoderResults]= useState([]);
   const [feedOpen,       setFeedOpen]       = useState(false);
   const [layersOpen,     setLayersOpen]     = useState(false);
-  const [detailsOpen,    setDetailsOpen]    = useState(false); // stats + layers hidden by default
+  const [detailsOpen,    setDetailsOpen]    = useState(false);
+  const [eventsOpen,     setEventsOpen]     = useState(false); // events hidden by default
   const [lastUpdated]                       = useState(formatLastUpdated);
   const drawerRef = useRef(null);
   const debouncedQuery = useDebounce(searchQuery, 350);
@@ -361,42 +362,54 @@ export default function Sidebar({
           <DistanceTool onMeasure={onMeasure} onClear={onMeasureClear} prefillA={measurePrefill} />
         ) : (
           <>
-            {/* Active events badge + markers toggle */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div className="stat-badge">
+            {/* ── Events toggle — collapsed by default ── */}
+            <button
+              className="section-accordion-btn events-accordion-btn"
+              onClick={() => setEventsOpen(v => !v)}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span className="live-dot" />
                 <Activity size={13} color="var(--accent)" />
-                <span>{eventsLoading ? '—' : activeEventCount} active events</span>
+                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text)' }}>
+                  {eventsLoading ? '—' : activeEventCount} active events
+                </span>
               </div>
-              <button
-                className={`markers-toggle-btn ${markersVisible ? '' : 'hidden'}`}
-                onClick={onToggleMarkers}
-                title={markersVisible ? 'Hide event markers' : 'Show event markers'}
-              >
-                {markersVisible ? <Eye size={14} /> : <EyeOff size={14} />}
-              </button>
-            </div>
-
-            {/* Category filter chips — horizontally scrollable, no wrap */}
-            <div className="filter-scroll-wrap">
-              <div className="filter-scroll">
-                {Object.entries(CATEGORY_LABELS).map(([catId, label]) => {
-                  const active = activeCategories.includes(catId);
-                  const Icon = CATEGORY_ICONS[catId] || Flame;
-                  return (
-                    <button
-                      key={catId}
-                      className={`filter-chip ${active ? 'active' : ''}`}
-                      onClick={() => onToggleCategory(catId)}
-                      style={{ '--cat-color': CATEGORY_COLORS[catId] }}
-                    >
-                      <Icon size={13} /> {label}
-                    </button>
-                  );
-                })}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button
+                  className={`markers-toggle-btn ${markersVisible ? '' : 'hidden'}`}
+                  onClick={e => { e.stopPropagation(); onToggleMarkers(); }}
+                  title={markersVisible ? 'Hide markers' : 'Show markers'}
+                  style={{ width: 26, height: 26 }}
+                >
+                  {markersVisible ? <Eye size={13} /> : <EyeOff size={13} />}
+                </button>
+                {eventsOpen ? <ChevronDown size={14} color="var(--muted)" /> : <ChevronRight size={14} color="var(--muted)" />}
               </div>
-            </div>
+            </button>
 
+            {eventsOpen && (
+              <>
+                {/* Category filter chips */}
+                <div className="filter-scroll-wrap">
+                  <div className="filter-scroll">
+                    {Object.entries(CATEGORY_LABELS).map(([catId, label]) => {
+                      const active = activeCategories.includes(catId);
+                      const Icon = CATEGORY_ICONS[catId] || Flame;
+                      return (
+                        <button
+                          key={catId}
+                          className={`filter-chip ${active ? 'active' : ''}`}
+                          onClick={() => onToggleCategory(catId)}
+                          style={{ '--cat-color': CATEGORY_COLORS[catId] }}
+                        >
+                          <Icon size={13} /> {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
             {/* Stats + Live Layers — collapsed by default, expand on demand */}
             <div>
               <button

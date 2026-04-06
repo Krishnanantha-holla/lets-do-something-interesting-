@@ -1444,3 +1444,37 @@ html, body {
     height: min(85vw, 85vh);
   }
 }
+
+/* ── Events accordion button ── */
+.events-accordion-btn {
+  background: var(--control-bg);
+  border: 1px solid var(--panel-border-inner);
+  border-radius: 999px;
+  padding: 8px 14px 8px 12px;
+  width: 100%;
+  justify-content: space-between;
+}
+.events-accordion-btn:hover { background: var(--panel-border); }
+
+/* ── Mobile bug fixes ── */
+@media (max-width: 768px) {
+  /* MapLibre controls must stay above feed drawer (z-index 510) */
+  .maplibregl-ctrl-bottom-right { z-index: 520 !important; }
+  .maplibregl-ctrl-top-right    { z-index: 520 !important; }
+
+  /* Map-click panel: account for hamburger button height */
+  .map-click-panel {
+    max-height: calc(100dvh - 72px) !important;
+  }
+
+  /* Sidebar content padding matches header on small screens */
+  .sidebar-content { padding: 12px 14px 20px; }
+
+  /* Feed drawer consistent height */
+  .feed-drawer { max-height: 65vh; }
+}
+
+@media (max-width: 480px) {
+  /* Sidebar content padding */
+  .sidebar-content { padding: 10px 12px 16px; gap: 10px; }
+}

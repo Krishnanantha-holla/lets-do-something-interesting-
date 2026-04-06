@@ -367,7 +367,7 @@ const MapView = forwardRef(function MapView(
     <div className="map-container" ref={containerRef}>
       <Map
         ref={mapRef}
-        initialViewState={{ longitude: 0, latitude: 20, zoom: 1.5, pitch: is3D ? 55 : 0, bearing: 0 }}
+        initialViewState={{ longitude: 20, latitude: 15, zoom: 2.8, pitch: is3D ? 45 : 0, bearing: 0 }}
         minZoom={1} maxZoom={22}
         maxPitch={85}
         mapStyle={mapStyle}
